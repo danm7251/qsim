@@ -1,3 +1,7 @@
+use qsim::state::State;
+
 fn main() {
-    println!("Welcome to Q-Sim!");
+    // Example usage
+    let num_qubits = 3;
+    let state = State::zero(num_qubits);
 }
