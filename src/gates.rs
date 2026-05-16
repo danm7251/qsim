@@ -6,6 +6,7 @@ use num_complex::Complex64;
 use crate::math_utils::C64;
 
 pub enum Gate64 {
+    I,
     X,
     Y,
     Z,
@@ -17,6 +18,10 @@ pub enum Gate64 {
 impl Gate64 {
     pub fn matrix(&self) -> Array2<Complex64> {
         match self {
+            Gate64::I => array![
+                [C64(1., 0.), C64(0., 0.)],
+                [C64(0., 0.), C64(1., 0.)]
+            ],
             Gate64::X => array![
                 [C64(0., 0.), C64(1., 0.)],
                 [C64(1., 0.), C64(0., 0.)]
