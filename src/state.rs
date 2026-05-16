@@ -26,7 +26,7 @@ impl State {
     }
 
     pub fn apply_gate(&mut self, target: usize, gate: Gate64) -> Result<(), &str> {
-        if target > self.circuit_size - 1 {
+        if target >= self.circuit_size {
             return Err("Target qubit does not exist")
         }
 
