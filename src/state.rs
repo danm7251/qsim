@@ -1,17 +1,16 @@
 use ndarray::Array1;
-use num_complex::Complex64;
+use num_complex::{Complex64, ComplexFloat};
+use rand::random;
 
-#[cfg(debug_assertions)]
-use crate::math_utils::print_matrix;
 use crate::{gates::Gate64, math_utils::kron};
 
 pub struct State {
-    amplitudes: Array1<Complex64>,
+    amplitudes: Array1<Complex64>, // Big endian, for now.
     circuit_size: usize
 }
 
 impl State {
-    // Creates a 0 state of `circuit_size` qubits.
+    /// Creates a 0 state of `circuit_size` qubits.
     pub fn zero(circuit_size: usize) -> Self {
         let mut amplitudes = Array1::zeros(1 << circuit_size);
         amplitudes[0] = Complex64::ONE;
@@ -22,11 +21,39 @@ impl State {
         }
     }
 
+    // Getters
+    /// Returns a slice of all the probability amplitudes tracked by the state.
+    /// Can panic if the internal array is not contiguous or in standard order.
     pub fn amplitudes(&self) -> &[Complex64] {
         self.amplitudes.as_slice().expect("Array1 should always be contiguous")
     }
 
-    // Applies `gate` to `target` and updates State.
+    /// Returns the number of qubits that make up the entire state.
+    pub fn circuit_size(&self) -> usize {
+        self.circuit_size
+    }
+
+    /// Returns the L2 norm of the entire state.
+    pub fn norm(&self) -> f64 {
+        self.amplitudes.iter().map(|amp| amp.norm_sqr()).sum()
+    }
+
+    /// Pretty print the probability distribution of the target qubit.
+    pub fn print_probability(self, target: usize) {
+        let prob_0: f64 = self.amplitudes
+            .iter() // Gives us a iterator of references
+            .enumerate() // Gives us the index of each reference
+            .filter(|(i, _)| index_is_zero(self.circuit_size, target, *i)) // We select the indexes we want
+            .map(|(_, a)| a.norm_sqr().re()) // We transform them to square norms
+            .sum(); // We recieve the total
+        let prob_1 = 1. - prob_0;
+        
+        println!("q{} = {:.2}% |0|, {:.2}% |1|", target, prob_0 * 100., prob_1 * 100.)
+    }
+
+    // Functionality
+    // Naive implementation of `apply_gate()`.
+    /// Applies `gate` to `target`, updating the state.
     pub fn apply_gate(&mut self, target: usize, gate: Gate64) -> Result<(), &str> {
         if target >= self.circuit_size {
             return Err("Target qubit does not exist")
@@ -45,13 +72,65 @@ impl State {
             }
         }
 
-        #[cfg(debug_assertions)]
-        print_matrix(&matrix);
-
         self.amplitudes = matrix.dot(&self.amplitudes);
 
         Ok(())
     }
+
+    pub fn measure(&mut self, target: usize) -> bool {
+        let circuit_size = self.circuit_size;
+
+        // Sum the magnitudes of all amplitudes where q[target] = 0
+        let mut prob_0 = 0.;
+        for (index, amp) in self.amplitudes.iter().enumerate() {
+            if index_is_zero(circuit_size, target, index) {
+                prob_0 += amp.norm_sqr().re();
+            }
+        }
+
+        // Determine outcome based on where a random number lands
+        let outcome = random::<f64>() > prob_0;
+        println!("Probability of 0 = {}", prob_0);
+
+        // Collapse state
+        for (index, amp) in self.amplitudes.iter_mut().enumerate() {
+            // If the index matches the outcome then renormalise otherwise set to zero
+            if index_is_zero(circuit_size, target, index) {
+                if outcome {
+                    println!("Setting amp {} to ZERO", index);
+                    *amp = Complex64::ZERO;
+                } else {
+                    println!("Setting amp {} to sqrt(prob_0)", index);
+                    *amp /= prob_0.sqrt();
+                }
+            } else {
+                if outcome {
+                    println!("Setting amp {} to sqrt(prob_1)", index);
+                    *amp /= (1. - prob_0).sqrt(); // TODO: Should be prob_1 I think check later.
+                } else {
+                    println!("Setting amp {} to ZERO", index);
+                    *amp = Complex64::ZERO;
+                }
+            }
+        }
+
+        outcome
+    }
+}
+
+fn index_is_zero(circuit_size: usize, target: usize, index: usize) -> bool {
+    let stride = 1 << (circuit_size - target - 1);
+    let block_size = 2 * stride;
+
+    // This gives the position relative to the pattern.
+    let pos = index % block_size;
+
+    // The range includes 0 and excludes stride
+    if (0..stride).contains(&pos) {
+        return true
+    }
+
+    false
 }
 
 #[cfg(test)]
