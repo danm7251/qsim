@@ -1,4 +1,4 @@
-use qsim::{math_utils::print_matrix, state::State};
+use qsim::{gates::Gate, state::State};
 
 /// Running notes:
 /// - When I was using prob_0 in both renorms the norm went 1->0->NaN->NaN each measurement.
@@ -10,7 +10,7 @@ fn main() {
     let mut state = State::zero(num_qubits);
     show_state(&state);
     show_norm(&state);
-    state.apply_gate(1, qsim::gates::Gate64::H).unwrap();
+    state.apply_gate(Gate::H {target: 0}).unwrap();
     show_state(&state);
     show_norm(&state);
     show_measure(&mut state, 0);

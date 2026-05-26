@@ -1,12 +1,12 @@
-use ndarray::Array1;
+use ndarray::{Array1, Array2};
 use num_complex::{Complex64, ComplexFloat};
 use rand::random;
 
-use crate::{gates::Gate64, math_utils::kron};
+use crate::{gates::Gate, math_utils::kron};
 
 pub struct State {
     amplitudes: Array1<Complex64>, // Big endian, for now.
-    circuit_size: usize
+    n: usize
 }
 
 impl State {
@@ -17,7 +17,7 @@ impl State {
 
         Self {
             amplitudes,
-            circuit_size
+            n: circuit_size
         }
     }
 
@@ -30,7 +30,7 @@ impl State {
 
     /// Returns the number of qubits that make up the entire state.
     pub fn circuit_size(&self) -> usize {
-        self.circuit_size
+        self.n
     }
 
     /// Returns the L2 norm of the entire state.
@@ -43,7 +43,7 @@ impl State {
         let prob_0: f64 = self.amplitudes
             .iter() // Gives us a iterator of references
             .enumerate() // Gives us the index of each reference
-            .filter(|(i, _)| index_is_zero(self.circuit_size, target, *i)) // We select the indexes we want
+            .filter(|(i, _)| index_is_zero(self.n, target, *i)) // We select the indexes we want
             .map(|(_, a)| a.norm_sqr().re()) // We transform them to square norms
             .sum(); // We recieve the total
         let prob_1 = 1. - prob_0;
@@ -51,22 +51,56 @@ impl State {
         println!("q{} = {:.2}% |0|, {:.2}% |1|", target, prob_0 * 100., prob_1 * 100.)
     }
 
+    pub fn apply_gate(&mut self, gate: Gate) -> Result<(), &str> {
+        match gate {
+            Gate::CNOT { control, target } => self.apply_cnot(control, target),
+            Gate::I => Err("Why would you use this"),
+            Gate::X { target } => self.apply_1q_gate(target, gate.matrix()),
+            Gate::Y { target } => self.apply_1q_gate(target, gate.matrix()),
+            Gate::Z { target } => self.apply_1q_gate(target, gate.matrix()),
+            Gate::H { target } => self.apply_1q_gate(target, gate.matrix()),
+            Gate::S { target } => self.apply_1q_gate(target, gate.matrix()),
+            Gate::T { target } => self.apply_1q_gate(target, gate.matrix())
+        }
+    }
+
+    fn apply_cnot(&mut self, control: usize, target: usize) -> Result<(), &str> {
+        if control == target {
+            return Err("Control and target must be distinct qubits")
+        } else if control >= self.n || target >= self.n {
+            return Err("Control and target must be an existing qubit")
+        }
+
+        // A CNOT gate works by swapping pairs of amplitudes in which the control bit is one but the target bit differs.
+        for index_low in 0..self.amplitudes.len() {
+            // We find every amplitude where c == 1 && t == 0.
+            if !index_is_zero(self.n, control, index_low) && index_is_zero(self.n, target, index_low) {
+                // We calculate the corresponding amplitude index with i2 = i1 + 2^(n - k - 1).
+                let index_high = index_low + (1 << self.n - target - 1);
+                // We swap the contents
+                self.amplitudes.swap(index_low, index_high);
+            }
+        }
+
+        Ok(())
+    }
+
     // Functionality
     // Naive implementation of `apply_gate()`.
     /// Applies `gate` to `target`, updating the state.
-    pub fn apply_gate(&mut self, target: usize, gate: Gate64) -> Result<(), &str> {
-        if target >= self.circuit_size {
+    fn apply_1q_gate(&mut self, target: usize, gate_matrix: Array2<Complex64>) -> Result<(), &str> {
+        if target >= self.n {
             return Err("Target qubit does not exist")
         }
 
-        let identity = Gate64::I.matrix();
+        let identity = Gate::I.matrix();
 
         // Construct full circuit matrix and apply
-        let mut matrix = if target == 0 { gate.matrix() } else { identity.clone() };
+        let mut matrix = if target == 0 { gate_matrix.clone() } else { identity.clone() };
 
-        for q in 1..self.circuit_size {
+        for q in 1..self.n {
             if q == target {
-                matrix = kron(&matrix, &gate.matrix())
+                matrix = kron(&matrix, &gate_matrix)
             } else {
                 matrix = kron(&matrix, &identity)
             }
@@ -78,7 +112,7 @@ impl State {
     }
 
     pub fn measure(&mut self, target: usize) -> bool {
-        let circuit_size = self.circuit_size;
+        let circuit_size = self.n;
 
         // Sum the magnitudes of all amplitudes where q[target] = 0
         let mut prob_0 = 0.;
@@ -159,7 +193,7 @@ mod test {
     #[test]
     fn h_creates_superposition() {
         let mut state = State::zero(1);
-        state.apply_gate(0, Gate64::H).expect("Failed to apply Gate64::H");
+        state.apply_gate(Gate::H {target: 0}).expect("Failed to apply Gate::H");
         let amps = state.amplitudes();
         let expected = C64(1.0 / SQRT_2, 0.);
         // Exact equalities will hold for one gate on a zero state.
