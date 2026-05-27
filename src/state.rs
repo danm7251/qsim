@@ -200,4 +200,88 @@ mod test {
         assert_eq!(amps[0], expected);
         assert_eq!(amps[1], expected);
     }
+
+    #[test]
+    fn cnot() {
+        struct TestCase {
+            name: &'static str,
+            circuit_size: usize,
+            instructions: Vec<Gate>,
+            outcome: Vec<Complex64>
+        }
+
+        let cases: Vec<TestCase> = vec![
+            TestCase {
+                name: "bell state phi plus",
+                circuit_size: 2,
+                instructions: vec![
+                    Gate::H { target: 0 },
+                    Gate::CNOT { control: 0, target: 1 }
+                ],
+                outcome: vec![
+                    C64(1.0/SQRT_2, 0.0),
+                    C64(0.0, 0.0),
+                    C64(0.0, 0.0),
+                    C64(1.0/SQRT_2, 0.0)
+                ]
+            },
+            TestCase {
+                name: "reversible",
+                circuit_size: 2,
+                instructions: vec![
+                    Gate::H { target: 0 },
+                    Gate::CNOT { control: 0, target: 1 },
+                    Gate::CNOT { control: 0, target: 1 }
+                ],
+                outcome: vec![
+                    C64(1.0/SQRT_2, 0.0),
+                    C64(0.0, 0.0),
+                    C64(1.0/SQRT_2, 0.0),
+                    C64(0.0, 0.0)
+                ]
+            },
+            TestCase {
+                name: "bell state phi plus from other side",
+                circuit_size: 2,
+                instructions: vec![
+                    Gate::H { target: 1 },
+                    Gate::CNOT { control: 1, target: 0 }
+                ],
+                outcome: vec![
+                    C64(1.0/SQRT_2, 0.0),
+                    C64(0.0, 0.0),
+                    C64(0.0, 0.0),
+                    C64(1.0/SQRT_2, 0.0)
+                ]
+            },
+            TestCase {
+                name: "3 qubits",
+                circuit_size: 3,
+                instructions: vec![
+                    Gate::H { target: 0 },
+                    Gate::CNOT { control: 0, target: 2 }
+                ],
+                outcome: vec![
+                    C64(1.0/SQRT_2, 0.0),
+                    C64(0.0, 0.0),
+                    C64(0.0, 0.0),
+                    C64(0.0, 0.0),
+                    C64(0.0, 0.0),
+                    C64(1.0/SQRT_2, 0.0),
+                    C64(0.0, 0.0),
+                    C64(0.0, 0.0)
+                ]
+            }
+        ];
+
+        for case in cases {
+            let mut state = State::zero(case.circuit_size);
+            for g in case.instructions {
+                state.apply_gate(g).expect("Failed to apply Gate");
+            }
+            for (i, amp) in state.amplitudes().iter().enumerate() {
+                assert_eq!(amp, &case.outcome[i], "Failed on amplitude {i} in test case \"{}\"", case.name);
+            }
+        }
+    }
 }

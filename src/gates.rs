@@ -5,6 +5,7 @@ use num_complex::Complex64;
 
 use crate::math_utils::C64;
 
+#[derive(Clone, Copy)]
 pub enum Gate {
     I,
     X { target: usize },
