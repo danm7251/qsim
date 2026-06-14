@@ -13,7 +13,7 @@ use crate::math_utils::C64;
 // However here Rust's strictness holds me back it will require some research,
 // since I hope to avoid writing one giant match table for every single variant.
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Gate {
     I,
     X { target: usize },

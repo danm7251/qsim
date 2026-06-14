@@ -67,6 +67,10 @@ impl State {
     // Functionality
     /// Applies a 'Gate' instruction to the state.
     pub fn apply_gate(&mut self, gate: Gate) -> Result<(), &str> {
+        match gate { 
+            Gate::CRP {..} => println!("\nEVALUATING GATE: {:?}", gate),
+            _ => ()
+        }
         match gate {
             // Consider that while sharing functionality, because CRP has to carry a parameterised matrix,
             // it has a different structure to CNOT. This is inconvenient.
@@ -129,7 +133,11 @@ impl State {
                 // Create a pair/subspace.
                 let pair: Array1<Complex64> = array![self.amplitudes[index_low], self.amplitudes[index_high]];
                 // Perform operation.
+                println!("OLD PAIR: {:?}", pair);
+                println!("APPLYING GATE MATRIX:");
+                crate::math_utils::print_matrix(&gate_matrix);
                 let updated_pair = gate_matrix.dot(&pair);
+                println!("NEW PAIR: {:?}", updated_pair);
                 // Replace amplitudes with updated values.
                 self.amplitudes[index_low] = updated_pair[0];
                 self.amplitudes[index_high] = updated_pair[1];
