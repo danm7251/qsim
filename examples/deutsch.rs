@@ -25,7 +25,7 @@ fn main() {
 
 fn deutsch_algorithm(f: &Vec<Gate>) -> bool {
     // Setup initial state
-    let mut state = State::zero(2);
+    let mut state = State::zero(2).unwrap();
     state.apply_gate(Gate::X { target: 1 }).expect("Failed to apply Gate::X to target=1");
     state.apply_gate(Gate::H { target: 0 }).expect("Failed to apply Gate::H to target=0");
     state.apply_gate(Gate::H { target: 1 }).expect("Failed to apply Gate::H to target=1");
