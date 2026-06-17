@@ -11,14 +11,23 @@ use qsim::{gates::Gate, state::State};
 fn main() {
     let n: usize = 3;
 
+    // Create a |010> state.
     let mut state = State::zero(n).unwrap();
+    state.apply_gate(Gate::X { target: 1 }).unwrap();
+
+    // Apply QFT circuit.
     let subcircuit: Vec<Gate> = construct_qft(n);
+    for g in subcircuit.clone() {
+        state.apply_gate(g).unwrap();
+    }
+
+    // Apply QFT circuit again.
     for g in subcircuit {
         state.apply_gate(g).unwrap();
     }
 
-    print!("{:?}", state.amplitudes());
-
+    // State should be back in |010>.
+    println!("{:?}", state.amplitudes());
 }
 
 fn construct_qft(n: usize) -> Vec<Gate> {
@@ -29,14 +38,22 @@ fn construct_qft(n: usize) -> Vec<Gate> {
         return circuit;
     }
 
+    // For each qubit in the circuit
     for i in 0..n {
         circuit.push(Gate::H { target: i });
-        for j in 0..(n - i - 1) {
-            circuit.push(Gate::CRP { control: j + i + 1, target: i, phi: PI / (2*(1 << (j - i))) as f64 });
+        // For every superior qubit the target qubit has
+        for j in (i + 1)..n {
+            circuit.push(Gate::CRP { control: j, target: i, phi: PI / (1 << (j - i)) as f64 });
         }
     }
 
-    println!("{:?}", circuit);
+    // Construct SWAP gates from CNOTs
+    for i in 0..(n / 2) {
+        let swap_qubit = n - i - 1;
+        circuit.push(Gate::CNOT { control: i, target: swap_qubit });
+        circuit.push(Gate::CNOT { control: swap_qubit, target: i });
+        circuit.push(Gate::CNOT { control: i, target: swap_qubit });
+    }
 
     circuit
 }
