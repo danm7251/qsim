@@ -1,8 +1,14 @@
+#[cfg(feature = "trace")]
+mod trace;
+
 use qsim::{gates::Gate, state::State};
 
 const DEBUG: bool = false;
 
 fn main() {
+    #[cfg(feature = "trace")]
+    let _guard = trace::init_tracing();
+
     // Example usage
     let num_qubits = 13;
     let mut state = State::zero(num_qubits).unwrap();

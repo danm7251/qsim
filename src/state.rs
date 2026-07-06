@@ -19,6 +19,8 @@ pub struct State {
 
 impl State {
     /// Creates a 0 state of `circuit_size` qubits.
+    
+    #[cfg_attr(feature = "trace", tracing::instrument(name = "Zero State Construction", err))]
     pub fn zero(circuit_size: usize) -> Result<Self, &'static str> {
         if circuit_size == 0 {
             // I will want to implement a custom error type soon.
@@ -66,7 +68,7 @@ impl State {
 
     // Functionality
     /// Applies a 'Gate' instruction to the state.
-    pub fn apply_gate(&mut self, gate: Gate) -> Result<(), &str> {
+    pub fn apply_gate(&mut self, gate: Gate) -> Result<(), &'static str> {
         match gate {
             // Consider that while sharing functionality, because CRP has to carry a parameterised matrix,
             // it has a different structure to CNOT. This is inconvenient.
@@ -87,7 +89,8 @@ impl State {
         }
     }
 
-    fn apply_1q_index(&mut self, target: usize, gate_matrix: Array2<Complex64>) -> Result<(), &str> {
+    #[cfg_attr(feature = "trace", tracing::instrument(skip(self, gate_matrix), name = "1 Qubit Gate", err))]
+    fn apply_1q_index(&mut self, target: usize, gate_matrix: Array2<Complex64>) -> Result<(), &'static str> {
         if target >= self.n {
             return Err("Target qubit does not exist")
         }
@@ -113,7 +116,8 @@ impl State {
     // While initially I had a specialised CNOT kernel,
     // and often specific implementations of gates are more efficient.
     // Maintaining specialised functions for each gate would be a nightmare.
-    fn apply_c2q_index(&mut self, control: usize, target: usize, gate_matrix: Array2<Complex64>) -> Result<(), &str> {
+    #[cfg_attr(feature = "trace", tracing::instrument(skip(self, gate_matrix), name = "2 Qubit Gate", err))]
+    fn apply_c2q_index(&mut self, control: usize, target: usize, gate_matrix: Array2<Complex64>) -> Result<(), &'static str> {
         if control == target {
             return Err("Control and target must be distinct qubits")
         } else if control >= self.n || target >= self.n {
@@ -145,7 +149,7 @@ impl State {
     #[allow(unused)]
     // Not inlined for easy memory profiling
     #[inline(never)]
-    fn apply_1q_kron(&mut self, target: usize, gate_matrix: Array2<Complex64>) -> Result<(), &str> {
+    fn apply_1q_kron(&mut self, target: usize, gate_matrix: Array2<Complex64>) -> Result<(), &'static str> {
         if target >= self.n {
             return Err("Target qubit does not exist")
         }
@@ -178,7 +182,7 @@ impl State {
     #[allow(unused)]
     // Not inlined for easy memory profiling
     #[inline(never)]
-    fn apply_c2q_kron(&mut self, control: usize, target: usize, gate_matrix: Array2<Complex64>) -> Result<(), &str> {
+    fn apply_c2q_kron(&mut self, control: usize, target: usize, gate_matrix: Array2<Complex64>) -> Result<(), &'static str> {
         if control == target {
             return Err("Control and target must be distinct qubits")
         } else if control >= self.n || target >= self.n {
