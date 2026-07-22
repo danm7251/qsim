@@ -89,6 +89,7 @@ impl State {
         }
     }
 
+    #[cfg_attr(feature = "bench", visibility::make(pub))]
     #[cfg_attr(feature = "trace", tracing::instrument(skip(self, gate_matrix), name = "1 Qubit Gate", err))]
     fn apply_1q_index(&mut self, target: usize, gate_matrix: Array2<Complex64>) -> Result<(), &'static str> {
         if target >= self.n {
@@ -116,6 +117,7 @@ impl State {
     // While initially I had a specialised CNOT kernel,
     // and often specific implementations of gates are more efficient.
     // Maintaining specialised functions for each gate would be a nightmare.
+    #[cfg_attr(feature = "bench", visibility::make(pub))]
     #[cfg_attr(feature = "trace", tracing::instrument(skip(self, gate_matrix), name = "2 Qubit Gate", err))]
     fn apply_c2q_index(&mut self, control: usize, target: usize, gate_matrix: Array2<Complex64>) -> Result<(), &'static str> {
         if control == target {
@@ -149,6 +151,7 @@ impl State {
     #[allow(unused)]
     // Not inlined for easy memory profiling
     #[inline(never)]
+    #[cfg_attr(feature = "bench", visibility::make(pub))]
     fn apply_1q_kron(&mut self, target: usize, gate_matrix: Array2<Complex64>) -> Result<(), &'static str> {
         if target >= self.n {
             return Err("Target qubit does not exist")
@@ -182,6 +185,7 @@ impl State {
     #[allow(unused)]
     // Not inlined for easy memory profiling
     #[inline(never)]
+    #[cfg_attr(feature = "bench", visibility::make(pub))]
     fn apply_c2q_kron(&mut self, control: usize, target: usize, gate_matrix: Array2<Complex64>) -> Result<(), &'static str> {
         if control == target {
             return Err("Control and target must be distinct qubits")

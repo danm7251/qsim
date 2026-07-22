@@ -10,6 +10,16 @@ rand = "0.10.1"
 tracing = { version = "0.1.44", optional = true }
 tracing-chrome = { version = "0.7.2", optional = true }
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"], optional = true }
+visibility = "0.1.1"
 
 [features]
+bench = []
 trace = ["dep:tracing", "dep:tracing-subscriber", "dep:tracing-chrome"]
+
+[dev-dependencies]
+criterion = { version = "0.8.2", features = ["html_reports"] }
+
+[[bench]]
+name = "kernel_bench"
+harness = false
+required_features = ["bench"]
