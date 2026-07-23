@@ -1,4 +1,4 @@
 /.vscode
 /target
+/scripts
 trace.json
-dhat-heap.json
