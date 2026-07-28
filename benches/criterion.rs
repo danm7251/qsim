@@ -1,4 +1,8 @@
+// Only compiles if the "bench" feature is enabled since otherwise many Qsim functions are private.
 #![cfg(feature = "bench")]
+
+// This benchmark will often use depracated functions for comparison.
+#![allow(deprecated)]
 
 use std::time::Duration;
 
@@ -42,7 +46,6 @@ fn bench_kernels_1q_over_target(c: &mut Criterion) {
 /// of the first, middle 
 fn bench_1q_index_kernel_over_target(c: &mut Criterion) {
     let mut group = c.benchmark_group("1Q Idx Kernel (t=[0, 3, 6], n=7)");
-    //group.measurement_time(Duration::from_secs(8));
 
     let n = 7;
     for target in [0, 3, 6] {
@@ -62,8 +65,13 @@ fn bench_1q_index_kernel_over_target(c: &mut Criterion) {
 }
 
 criterion_group!(
+    // Name of function group for benchmarking.
     benches,
-    //bench_kernels_1q_over_target, TODO: Separate kernel vs kernel and Idx Kernel only into separate files
+
+    // Targets to add to the function group.
+    bench_kernels_1q_over_target,
     bench_1q_index_kernel_over_target
 );
+
+// Takes the function group and expands into the program's entry point.
 criterion_main!(benches);
