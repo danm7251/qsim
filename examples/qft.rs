@@ -1,5 +1,9 @@
 use std::f64::consts::PI;
 
+#[cfg(feature = "trace")]
+#[path ="../src/trace.rs"]
+mod trace;
+
 use qsim::{gates::Gate, state::State};
 
 
@@ -9,7 +13,10 @@ use qsim::{gates::Gate, state::State};
 /// allowing us to transform the basis states.
 
 fn main() {
-    let n: usize = 3;
+    #[cfg(feature = "trace")]
+    let _guard = trace::init_tracing();
+
+    let n: usize = 10;
 
     // Create a |010> state.
     let mut state = State::zero(n).unwrap();
@@ -27,7 +34,7 @@ fn main() {
     }
 
     // State should be back in |010>.
-    println!("{:?}", state.amplitudes());
+    // `println!("{:?}", state.amplitudes());`
 }
 
 fn construct_qft(n: usize) -> Vec<Gate> {

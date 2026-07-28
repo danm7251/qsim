@@ -1,3 +1,7 @@
+#[cfg(feature = "trace")]
+#[path ="../src/trace.rs"]
+mod trace;
+
 use qsim::{gates::Gate, state::State};
 use rand::random;
 
@@ -7,6 +11,9 @@ use rand::random;
 /// In classical computing this would require two checks.
 
 fn main() {
+    #[cfg(feature = "trace")]
+    let _guard = trace::init_tracing();
+
     // Generate a random integer between 1 and 4
     let n = (random::<u8>() % 4) + 1;
     // Use it to pick a Deutsch function

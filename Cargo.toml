@@ -4,6 +4,29 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+chrono = { version = "0.4.45", optional = true }
 ndarray = "0.17.2"
 num-complex = "0.4.6"
 rand = "0.10.1"
+tracing = { version = "0.1.44", optional = true }
+tracing-chrome = { version = "0.7.2", optional = true }
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"], optional = true }
+visibility = "0.1.1"
+
+[features]
+bench = []
+trace = ["dep:tracing", "dep:tracing-subscriber", "dep:tracing-chrome", "dep:chrono"]
+
+[dev-dependencies]
+criterion = { version = "0.8.2", features = ["html_reports"] }
+dhat = "0.3.3"
+
+[[bench]]
+name = "criterion"
+harness = false
+required_features = ["bench"]
+
+[[bench]]
+name = "dhat"
+harness = false
+required_features = ["bench"]
