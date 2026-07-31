@@ -1,12 +1,23 @@
 use super::Element;
 
 #[derive(Debug)]
-pub struct Matrix {
+pub struct SquareMatrix {
     elements: Vec<Element>,
     dim: usize
 }
 
-impl Matrix {
+impl SquareMatrix {
+    pub fn zero(size: usize) -> Self {
+        Self {
+            elements: vec![Element::ZERO; size * size],
+            dim: size
+        }
+    }
+
+    pub fn dim(&self) -> usize {
+        self.dim
+    }
+
     pub fn get(&self, row: usize, col: usize) -> &Element {
         debug_assert!(row < self.dim && col < self.dim);
         &self.elements[row * self.dim + col]
@@ -18,8 +29,8 @@ impl Matrix {
     }
 }
 
-pub fn i() -> Matrix {
-    Matrix {
+pub fn i() -> SquareMatrix {
+    SquareMatrix {
         elements: vec![
             Element::new(1., 0. ), Element::new(0., 0. ),
             Element::new(0., 0. ), Element::new(1., 0. )
@@ -28,8 +39,8 @@ pub fn i() -> Matrix {
     }
 }
 
-pub fn x() -> Matrix {
-    Matrix {
+pub fn x() -> SquareMatrix {
+    SquareMatrix {
         elements: vec![
             Element::new(0., 0. ), Element::new(1., 0. ),
             Element::new(1., 0. ), Element::new(0., 0. )
@@ -38,8 +49,8 @@ pub fn x() -> Matrix {
     }
 }
 
-pub fn y() -> Matrix {
-    Matrix {
+pub fn y() -> SquareMatrix {
+    SquareMatrix {
         elements: vec![
             Element::new(0., 0. ), Element::new(0., -1. ),
             Element::new(0., 1. ), Element::new(0., 0. )
@@ -48,8 +59,8 @@ pub fn y() -> Matrix {
     }
 }
 
-pub fn z() -> Matrix {
-    Matrix {
+pub fn z() -> SquareMatrix {
+    SquareMatrix {
         elements: vec![
             Element::new(1., 0. ), Element::new(0., 0. ),
             Element::new(0., 0. ), Element::new(-1., 0. )
