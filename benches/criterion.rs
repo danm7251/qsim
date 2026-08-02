@@ -68,7 +68,7 @@ fn bench_1q_index_kernel_over_target(c: &mut Criterion) {
 
 // Test construction of Matrix class against ndarray::Array2
 fn bench_matrix_construction(c: &mut Criterion) {
-    use qsim::math_utils_v2::matrix::SquareMatrix;
+    use qsim::linalg::SquareMatrix;
     use ndarray::Array2;
     use num_complex::Complex;
 
@@ -99,9 +99,54 @@ fn bench_matrix_construction(c: &mut Criterion) {
     group.finish();
 }
 
+// Test construction of Vector class against ndarray::Array1
+fn bench_vector_construction(c: &mut Criterion) {
+    use qsim::linalg::Vector;
+    use ndarray::Array1;
+    use num_complex::Complex;
+
+    let mut group = c.benchmark_group("Vector Construction");
+
+    // Sizes of vectors.
+    let sizes = [
+        1,
+        4,
+        16,
+        64,
+        256,
+        1_024,
+        4_096,
+        16_384,
+        65_536,
+        262_144,
+        1_048_576,
+    ];
+
+    for size in sizes {
+
+        group.bench_with_input(
+            BenchmarkId::new("Vector", size),
+            &size,
+            |b, &size| b.iter(
+                || black_box(Vector::zeros(size))
+            )
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new("Array1", size),
+            &size,
+            |b, &size| b.iter(
+                || black_box(Array1::<Complex<f64>>::zeros(size))
+            )
+        );
+    }
+
+    group.finish();
+}
+
 // Test traversing Matrix sequentially against ndarray::Array2
 fn bench_matrix_sequential_traversal(c: &mut Criterion) {
-    use qsim::math_utils_v2::matrix::SquareMatrix;
+    use qsim::linalg::SquareMatrix;
     use ndarray::Array2;
     use num_complex::Complex;
 
@@ -160,9 +205,79 @@ fn bench_matrix_sequential_traversal(c: &mut Criterion) {
     group.finish();
 }
 
+// Test traversing Vector sequentially against ndarray::Array1
+fn bench_vector_sequential_traversal(c: &mut Criterion) {
+    use qsim::linalg::Vector;
+    use ndarray::Array1;
+    use num_complex::Complex;
+
+    let mut group = c.benchmark_group("Vector Sequential Read");
+    group.measurement_time(Duration::from_secs(10));
+
+    // Vector lengths and traversals.
+    // Each configuration performs 1,048,576 element reads.
+    let parameters = [
+        (1, 1_048_576),
+        (4, 262_144),
+        (16, 65_536),
+        (64, 16_384),
+        (256, 4_096),
+        (1_024, 1_024),
+        (4_096, 256),
+        (16_384, 64),
+        (65_536, 16),
+        (262_144, 4),
+        (1_048_576, 1),
+    ];
+
+    for (size, traversals) in parameters {
+        // Construct Matrices
+        let my_impl = Vector::zeros(size);
+        let nd_impl = Array1::<Complex<f64>>::zeros(size);
+
+        group.bench_with_input(
+            BenchmarkId::new("Vector", size),
+            &size,
+            |b, &size| b.iter(
+                || {
+                    let mut sum = Complex::<f64>::ZERO;
+
+                    for _ in 0..traversals {
+                        for i in 0..size {
+                            sum += my_impl.get(i);
+                        }
+                    }
+
+                    black_box(sum);
+                }
+            )
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new("Array1", size),
+            &size,
+            |b, &size| b.iter(
+                || {
+                    let mut sum = Complex::<f64>::ZERO;
+
+                    for _ in 0..traversals {
+                        for i in 0..size {
+                            sum += nd_impl[i];
+                        }
+                    }
+
+                    black_box(sum);
+                }
+            )
+        );
+    }
+
+    group.finish();
+}
+
 // Test traversing Matrix sequentially against ndarray::Array2
 fn bench_matrix_random_traversal(c: &mut Criterion) {
-    use qsim::math_utils_v2::matrix::SquareMatrix;
+    use qsim::linalg::SquareMatrix;
 
     use ndarray::Array2;
     use num_complex::Complex;
@@ -224,6 +339,80 @@ fn bench_matrix_random_traversal(c: &mut Criterion) {
     group.finish();
 }
 
+// Test traversing Vector sequentially against ndarray::Array1
+fn bench_vector_random_traversal(c: &mut Criterion) {
+    use qsim::linalg::Vector;
+
+    use ndarray::Array1;
+    use num_complex::Complex;
+    use rand::{rng, RngExt};
+
+    let mut group = c.benchmark_group("Vector Random Read");
+    group.measurement_time(Duration::from_secs(10));
+
+    // Vector lengths and traversals.
+    // Each configuration performs 1,048,576 element reads.
+    let parameters = [
+        (1, 1_048_576),
+        (4, 262_144),
+        (16, 65_536),
+        (64, 16_384),
+        (256, 4_096),
+        (1_024, 1_024),
+        (4_096, 256),
+        (16_384, 64),
+        (65_536, 16),
+        (262_144, 4),
+        (1_048_576, 1),
+    ];
+
+    for (size, accesses) in parameters {
+        // Construct Matrices
+        let my_impl = Vector::zeros(size);
+        let nd_impl = Array1::<Complex<f64>>::zeros(size);
+
+        // Generate random coordinates
+        let mut rng = rng();
+        let indices: Vec<usize> = (0..(accesses*size))
+            .map(|_| rng.random_range(0..size))
+            .collect();
+
+        group.bench_with_input(
+            BenchmarkId::new("Vector", size),
+            &size,
+            |b, _| b.iter(
+                || {
+                    let mut sum = Complex::<f64>::ZERO;
+
+                    for &i in &indices {
+                        sum += my_impl.get(i);
+                    }
+
+                    black_box(sum);
+                }
+            )
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new("Array1", size),
+            &size,
+            |b, _| b.iter(
+                || {
+                    let mut sum = Complex::<f64>::ZERO;
+
+                    for &i in &indices {
+                        sum += nd_impl[i];
+                    }
+
+                    black_box(sum);
+                }
+            )
+        );
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     // Name of function group for benchmarking.
     benches,
@@ -231,9 +420,12 @@ criterion_group!(
     // Targets to add to the function group.
     //bench_kernels_1q_over_target,
     //bench_1q_index_kernel_over_target,
-    bench_matrix_construction,
-    bench_matrix_sequential_traversal,
-    bench_matrix_random_traversal
+    //bench_matrix_construction,
+    bench_vector_construction,
+    //bench_matrix_sequential_traversal,
+    bench_vector_sequential_traversal,
+    //bench_matrix_random_traversal
+    bench_vector_random_traversal,
 );
 
 // Takes the function group and expands into the program's entry point.
