@@ -12,6 +12,10 @@ impl Vector {
         }
     }
 
+    pub fn len(&self) -> usize {
+        self.elements.len()
+    }
+
     pub fn get(&self, index: usize) -> &Element {
         debug_assert!(index < self.elements.len());
         &self.elements[index]

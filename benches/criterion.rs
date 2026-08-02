@@ -7,6 +7,7 @@
 use std::{hint::black_box, time::Duration};
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+use ndarray::Array2;
 use qsim::{gates::Gate, state::State};
 
 // For the first benchmark test I will compare the index and kron methods
@@ -413,6 +414,72 @@ fn bench_vector_random_traversal(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_matrix_vector_mul_on_pairs(c: &mut Criterion) {
+    use qsim::linalg::Vector;
+    use qsim::linalg::SquareMatrix;
+    use qsim::linalg::linear_map;
+
+    use ndarray::Array1;
+    use num_complex::Complex;
+    use rand::{rng, RngExt};
+
+    let mut group = c.benchmark_group("Mat-Vec Multiplication");
+
+    let size = 2;
+
+    // Construct Vectors and Matrices.
+    let mut my_vec_impl = Vector::zeros(size);
+    let mut my_mat_impl = SquareMatrix::zero(size);
+    let mut nd_vec_impl = Array1::<Complex<f64>>::zeros(size);
+    let mut nd_mat_impl = Array2::<Complex<f64>>::zeros((size, size));
+
+    // Generate random values.
+    let mut rng = rng();
+    for i in 0..size {
+        let random_complex = Complex::<f64>::new(
+            rng.random(),
+            rng.random()
+        );
+
+        *my_vec_impl.get_mut(i) = random_complex;
+        nd_vec_impl[i] = random_complex;
+
+        for j in 0..size {
+            let random_complex = Complex::<f64>::new(
+                rng.random(),
+                rng.random()
+            );
+
+            *my_mat_impl.get_mut(i, j) = random_complex;
+            nd_mat_impl[(i, j)] = random_complex;
+        }
+    }
+
+    group.bench_with_input(
+        BenchmarkId::new("Custom", size),
+        &size,
+        |b, _| b.iter(
+            || {
+                let res = linear_map(&my_mat_impl, &my_vec_impl);
+                black_box(res);
+            }
+        )
+    );
+
+    group.bench_with_input(
+        BenchmarkId::new("ndarray", size),
+        &size,
+        |b, _| b.iter(
+            || {
+                let res = nd_mat_impl.dot(&nd_vec_impl);
+                black_box(res);
+            }
+        )
+    );
+
+    group.finish();
+}
+
 criterion_group!(
     // Name of function group for benchmarking.
     benches,
@@ -421,11 +488,12 @@ criterion_group!(
     //bench_kernels_1q_over_target,
     //bench_1q_index_kernel_over_target,
     //bench_matrix_construction,
-    bench_vector_construction,
+    //bench_vector_construction,
     //bench_matrix_sequential_traversal,
-    bench_vector_sequential_traversal,
+    //bench_vector_sequential_traversal,
     //bench_matrix_random_traversal
-    bench_vector_random_traversal,
+    //bench_vector_random_traversal,
+    bench_matrix_vector_mul_on_pairs
 );
 
 // Takes the function group and expands into the program's entry point.
