@@ -1,3 +1,5 @@
+use std::f64::consts::{FRAC_1_SQRT_2};
+
 use super::Element;
 
 #[derive(Debug)]
@@ -63,21 +65,51 @@ pub fn i() -> SquareMatrix {
 
 pub fn x() -> SquareMatrix {
     SquareMatrix::from_array([
-            [(0., 0. ), (1., 0. )],
-            [(1., 0. ), (0., 0. )]
+        [(0., 0. ), (1., 0. )],
+        [(1., 0. ), (0., 0. )]
     ])
 }
 
 pub fn y() -> SquareMatrix {
     SquareMatrix::from_array([
-            [(0., 0. ), (0., -1. )],
-            [(0., 1. ), (0., 0. )]
+        [(0., 0. ), (0., -1. )],
+        [(0., 1. ), (0., 0. )]
     ])
 }
 
 pub fn z() -> SquareMatrix {
     SquareMatrix::from_array([
-            [(1., 0. ), (0., 0. )],
-            [(0., 0. ), (-1., 0. )]
+        [(1., 0. ), (0., 0. )],
+        [(0., 0. ), (-1., 0. )]
+    ])
+}
+
+pub fn h() -> SquareMatrix {
+    SquareMatrix::from_array([
+        [(FRAC_1_SQRT_2, 0.), (FRAC_1_SQRT_2, 0.)],
+        [(FRAC_1_SQRT_2, 0.), (-FRAC_1_SQRT_2, 0.)]
+    ])
+}
+
+pub fn s() -> SquareMatrix {
+    SquareMatrix::from_array([
+        [(1., 0.), (0., 0.)],
+        [(0., 0.), (0., 1.)]
+    ])
+}
+
+pub fn t() -> SquareMatrix {
+    // e^(i*PI/4) = 1/sqrt(2) + i*1/sqrt(2)
+    SquareMatrix::from_array([
+        [(1., 0.), (0., 0.)],
+        [(0., 0.), (FRAC_1_SQRT_2, FRAC_1_SQRT_2)]
+    ])
+}
+
+pub fn p(phi: f64) -> SquareMatrix {
+    // e^(i*phi) = cos(phi) + i*sin(phi)
+    SquareMatrix::from_array([
+        [(1., 0.), (0., 0.)],
+        [(0., 0.), (phi.cos(), phi.sin())]
     ])
 }
