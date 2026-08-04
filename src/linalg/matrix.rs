@@ -14,10 +14,13 @@ impl SquareMatrix {
         }
     }
 
-    pub fn from_array<const N: usize>(array: [[Element; N]; N]) -> Self {
-        let mut elements = Vec::with_capacity(N *N);
+    /// Constructs an NxN `SquareMatrix` from a 2D array of tuples.
+    pub fn from_array<const N: usize>(array: [[(f64, f64); N]; N]) -> Self {
+        let mut elements: Vec<Element> = Vec::with_capacity(N *N);
         for row in array {
-            elements.extend(row);
+            for (re, im) in row {
+                elements.push(Element::new(re, im));
+            }
         }
         
         Self {
@@ -53,28 +56,28 @@ impl SquareMatrix {
 
 pub fn i() -> SquareMatrix {
     SquareMatrix::from_array([
-        [Element::new(1., 0. ), Element::new(0., 0. )],
-        [Element::new(0., 0. ), Element::new(1., 0. )]
+        [(1., 0. ), (0., 0. )],
+        [(0., 0. ), (1., 0. )]
     ])
 }
 
 pub fn x() -> SquareMatrix {
     SquareMatrix::from_array([
-            [Element::new(0., 0. ), Element::new(1., 0. )],
-            [Element::new(1., 0. ), Element::new(0., 0. )]
+            [(0., 0. ), (1., 0. )],
+            [(1., 0. ), (0., 0. )]
     ])
 }
 
 pub fn y() -> SquareMatrix {
     SquareMatrix::from_array([
-            [Element::new(0., 0. ), Element::new(0., -1. )],
-            [Element::new(0., 1. ), Element::new(0., 0. )]
+            [(0., 0. ), (0., -1. )],
+            [(0., 1. ), (0., 0. )]
     ])
 }
 
 pub fn z() -> SquareMatrix {
     SquareMatrix::from_array([
-            [Element::new(1., 0. ), Element::new(0., 0. )],
-            [Element::new(0., 0. ), Element::new(-1., 0. )]
+            [(1., 0. ), (0., 0. )],
+            [(0., 0. ), (-1., 0. )]
     ])
 }

@@ -520,7 +520,10 @@ fn bench_mat_constructors(c: &mut Criterion) {
         |b, _| b.iter(
             || {
                 for _ in 0..loops {
-                    let res = SquareMatrix::from_array(values);
+                    let res = SquareMatrix::from_array([
+                        [(0.1, 0.25), (0.15, 0.5)],
+                        [(-0.5, 0.26), (0.101, 1.5)]
+                    ]);
                     black_box(res);
                 }
             }
