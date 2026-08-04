@@ -13,7 +13,7 @@ pub type Element = Complex<f64>;
 
 /// Multiplies a vector by a matrix allocating a new vector of equal length.
 pub fn linear_map(matrix: &SquareMatrix, vector: &Vector) -> Vector {
-    debug_assert!(vector.len() == matrix.dim());
+    debug_assert!(vector.len() == matrix.size());
 
     let n = vector.len();
     let mut output = Vector::zeros(n);

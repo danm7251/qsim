@@ -480,6 +480,85 @@ fn bench_matrix_vector_mul_on_pairs(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_mat_constructors(c: &mut Criterion) {
+    use qsim::linalg::SquareMatrix;
+
+    use num_complex::Complex;
+    use ndarray::array;
+
+    let mut group = c.benchmark_group("Mat constructors");
+    group.measurement_time(Duration::from_secs(10));
+
+    let loops = 1;
+    let size = 2;
+    let values = [
+        [Complex::<f64>::new(0.1, 0.25), Complex::<f64>::new(0.15, 0.5)],
+        [Complex::<f64>::new(-0.5, 0.26), Complex::<f64>::new(0.101, 1.5)]
+    ];
+
+    group.bench_with_input(
+        BenchmarkId::new("Zero", size),
+        &size,
+        |b, _| b.iter(
+            || {
+                for _ in 0..loops {
+                    let mut res = SquareMatrix::zero(size);
+                    for (i, row) in values.iter().enumerate() {
+                        for (j, elem) in row.iter().enumerate() {
+                            *res.get_mut(i, j) = *elem;
+                        }
+                    }
+                    black_box(res);
+                }
+            }
+        )
+    );
+
+    group.bench_with_input(
+        BenchmarkId::new("From Array", size),
+        &size,
+        |b, _| b.iter(
+            || {
+                for _ in 0..loops {
+                    let res = SquareMatrix::from_array(values);
+                    black_box(res);
+                }
+            }
+        )
+    );
+
+    group.bench_with_input(
+        BenchmarkId::new("From Array (depracated)", size),
+        &size,
+        |b, _| b.iter(
+            || {
+                for _ in 0..loops {
+                    let res = SquareMatrix::from_array_2(values);
+                    black_box(res);
+                }
+            }
+        )
+    );
+
+    group.bench_with_input(
+        BenchmarkId::new("ndarray::array!", size),
+        &size,
+        |b, _| b.iter(
+            || {
+                for _ in 0..loops {
+                    let res = array![
+                        [Complex::<f64>::new(0.1, 0.25), Complex::<f64>::new(0.15, 0.5)],
+                        [Complex::<f64>::new(-0.5, 0.26), Complex::<f64>::new(0.101, 1.5)]
+                    ];
+                    black_box(res);
+                }
+            }
+        )
+    );
+
+    group.finish();
+}
+
 criterion_group!(
     // Name of function group for benchmarking.
     benches,
@@ -493,7 +572,8 @@ criterion_group!(
     //bench_vector_sequential_traversal,
     //bench_matrix_random_traversal
     //bench_vector_random_traversal,
-    bench_matrix_vector_mul_on_pairs
+    //bench_matrix_vector_mul_on_pairs,
+    bench_mat_constructors
 );
 
 // Takes the function group and expands into the program's entry point.
