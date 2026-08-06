@@ -12,6 +12,12 @@ impl Vector {
         }
     }
 
+    pub fn from_elements<const N: usize>(array: [Element; N]) -> Self {
+        Self {
+            elements: array.to_vec(),
+        }
+    }
+
     pub fn len(&self) -> usize {
         self.elements.len()
     }
