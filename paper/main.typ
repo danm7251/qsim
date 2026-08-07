@@ -37,4 +37,4 @@
 #include "chapters/conclusion.typ"
 #pagebreak()
 
-#include "chapters/bibliography.typ"
+#include "chapters/references.typ"
