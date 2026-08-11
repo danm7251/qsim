@@ -1,4 +1,4 @@
-use std::f64::consts::SQRT_2;
+use std::f64::consts::FRAC_1_SQRT_2;
 
 use ndarray::{array, Array2};
 use num_complex::Complex64;
@@ -59,7 +59,7 @@ impl Gate {
                 [C64(0., 0.), C64(-1., 0.)]
             ],
             Gate::H {..} => {
-                let c = C64(1.0/SQRT_2, 0.);
+                let c = C64(FRAC_1_SQRT_2, 0.);
                 c*array![
                     [C64(1., 0.), C64(1., 0.)],
                     [C64(1., 0.), C64(-1., 0.)]
@@ -70,7 +70,7 @@ impl Gate {
                 [C64(0., 0.), C64(0., 1.)]
             ],
             Gate::T {..} => {
-                let c = 1.0/SQRT_2;
+                let c = FRAC_1_SQRT_2;
                 array![
                     [C64(1., 0.), C64(0., 0.)],
                     [C64(0., 0.), C64(c, c)]
