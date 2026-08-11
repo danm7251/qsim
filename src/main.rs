@@ -1,7 +1,7 @@
 #[cfg(feature = "trace")]
 mod trace;
 
-use qsim::{gates::Gate, state::State};
+use qsim::legacy::{gates::Gate, LegacyState};
 
 const DEBUG: bool = false;
 
@@ -11,7 +11,7 @@ fn main() {
 
     // Example usage
     let num_qubits = 13;
-    let mut state = State::zero(num_qubits).unwrap();
+    let mut state = LegacyState::zero(num_qubits).unwrap();
     show_state(&state);
     show_norm(&state);
     state.apply_gate(Gate::H {target: 0}).unwrap();
@@ -31,18 +31,18 @@ fn main() {
     show_norm(&state);
 }
 
-fn show_norm(state: &State) {
+fn show_norm(state: &LegacyState) {
     if DEBUG { println!("L2 Norm: {:.2}", state.norm()) }
 }
 
-fn show_measure(state: &mut State, target: usize) {
+fn show_measure(state: &mut LegacyState, target: usize) {
     if DEBUG {
         let result = if state.measure(target) { 1 } else { 0 };
         println!("Q{} = {}", target, result)
     }
 }
 
-fn show_state(state: &State) {
+fn show_state(state: &LegacyState) {
     if DEBUG {
         for (i, amp) in state.amplitudes().iter().enumerate() {
             println!("Amplitude {} = {}", i, amp)

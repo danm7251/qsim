@@ -1,6 +1,6 @@
 use std::f64::consts::PI;
 
-use qsim::{api::Instruction, gates::Gate};
+use qsim::{api::Instruction, legacy::gates::Gate};
 
 pub fn construct_qft_for_legacy(n: usize) -> Vec<Gate> {
     let mut circuit = Vec::<Gate>::new();

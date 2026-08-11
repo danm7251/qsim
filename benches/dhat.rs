@@ -6,11 +6,12 @@ use std::{fs, hint::black_box};
 use dhat::Profiler;
 use ndarray::{Array1, Array2};
 use num_complex::Complex;
+
 use qsim::{
     api::Instruction,
-    gates::Gate,
+    legacy::{gates::Gate, LegacyState},
     linalg::{linear_map, SquareMatrix, Vector},
-    new_state, state,
+    state::State,
 };
 
 mod common;
@@ -122,7 +123,7 @@ fn benchmarks() -> Vec<BenchGroup> {
 
 /// Executes a QFT circuit using the current statevector implementation.
 fn current_qft_execution(n: usize, circuit: Vec<Instruction>) {
-    let mut state = black_box(new_state::State::zero(n).unwrap());
+    let mut state = black_box(State::zero(n).unwrap());
     for i in circuit {
         state.execute(i).unwrap();
     }
@@ -130,7 +131,7 @@ fn current_qft_execution(n: usize, circuit: Vec<Instruction>) {
 
 /// Executes a QFT circuit using the legacy statevector implementation.
 fn legacy_qft_execution(n: usize, circuit: Vec<Gate>) {
-    let mut state = black_box(state::State::zero(n).unwrap());
+    let mut state = black_box(LegacyState::zero(n).unwrap());
     for g in circuit {
         state.apply_gate(g).unwrap();
     }

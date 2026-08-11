@@ -64,9 +64,7 @@ pub fn print_matrix<F: ComplexFloat>(matrix: &Array2<F>) where F::Real: Display 
 mod tests {
     use ndarray::array;
 
-    use crate::math_utils::print_matrix;
-
-    use super::{Array2, Complex64, kron, C64};
+    use super::{Array2, C64, Complex64, kron, print_matrix};
 
     #[test]
     fn test_kron() {

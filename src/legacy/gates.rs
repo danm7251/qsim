@@ -3,7 +3,7 @@ use std::f64::consts::SQRT_2;
 use ndarray::{array, Array2};
 use num_complex::Complex64;
 
-use crate::math_utils::C64;
+use super::math_utils::C64;
 
 // At some point I intend to provide a more user facing enum,
 // such as Instruction that encodes the target/control data.

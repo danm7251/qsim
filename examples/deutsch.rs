@@ -2,7 +2,7 @@
 #[path ="../src/trace.rs"]
 mod trace;
 
-use qsim::{gates::Gate, state::State};
+use qsim::{api::Instruction, state::State};
 use rand::random;
 
 /// An implementation of Deutsch's algorithm.
@@ -30,33 +30,33 @@ fn main() {
     }
 }
 
-fn deutsch_algorithm(f: &Vec<Gate>) -> bool {
+fn deutsch_algorithm(f: &Vec<Instruction>) -> bool {
     // Setup initial state
     let mut state = State::zero(2).unwrap();
-    state.apply_gate(Gate::X { target: 1 }).expect("Failed to apply Gate::X to target=1");
-    state.apply_gate(Gate::H { target: 0 }).expect("Failed to apply Gate::H to target=0");
-    state.apply_gate(Gate::H { target: 1 }).expect("Failed to apply Gate::H to target=1");
+    state.execute(Instruction::X { q: 1 }).expect("Failed to apply Instruction::X to target=1");
+    state.execute(Instruction::H { q: 0 }).expect("Failed to apply Instruction::H to target=0");
+    state.execute(Instruction::H { q: 1 }).expect("Failed to apply Instruction::H to target=1");
 
     // Apply Deutsch function
     for &g in f {
-        state.apply_gate(g).expect("Failed to apply Deutsch function");
+        state.execute(g).expect("Failed to apply Deutsch function");
     }
 
     // Transform and measure result
-    state.apply_gate(Gate::H { target: 0 }).expect("Failed to apply Gate::H to target=0");
-    state.measure(0)
+    state.execute(Instruction::H { q: 0 }).expect("Failed to apply Instruction::H to target=0");
+    state.measure(0).unwrap()
 }
 
-fn deutsch_function(n: u8) -> Vec<Gate> {
+fn deutsch_function(n: u8) -> Vec<Instruction> {
     match n {
         // f1(a) = 0
         1 => vec![],
         // f2(a) = a
-        2 => vec![Gate::CNOT { control: 0, target: 1 }],
+        2 => vec![Instruction::CNOT { q_c: 0, q_t: 1 }],
         // f3(a) = !a
-        3 => vec![Gate::CNOT { control: 0, target: 1 }, Gate::X { target: 1 }],
+        3 => vec![Instruction::CNOT { q_c: 0, q_t: 1 }, Instruction::X { q: 1 }],
         // f4(a) = 1
-        4 => vec![Gate::X { target: 1 }],
+        4 => vec![Instruction::X { q: 1 }],
         _ => panic!("Invalid option, please pick f1(), f2(), f3() or f4()")
     }
 }
