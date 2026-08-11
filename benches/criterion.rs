@@ -11,8 +11,12 @@ use rand::{rng, RngExt};
 use qsim::{
     gates::Gate,
     linalg::{linear_map, SquareMatrix, Vector},
-    state::State,
+    new_state,
+    state,
 };
+
+mod common;
+use common::{construct_qft_for_current, construct_qft_for_legacy};
 
 // Active benchmarks.
 criterion_group!(
@@ -25,6 +29,7 @@ criterion_group!(
     bench_matrix_random_access,
     bench_matrix_vector_mul_on_pairs,
     bench_matrix_construction,
+    bench_legacy_vs_current_state_with_qft
 );
 
 criterion_main!(benches);
@@ -43,12 +48,12 @@ fn bench_1q_kernels_index_vs_kronecker(c: &mut Criterion) {
     for target in 0..n {
         let gate = Gate::H { target };
 
-        let mut state = State::zero(n).unwrap();
+        let mut state = state::State::zero(n).unwrap();
         group.bench_with_input(BenchmarkId::new("Index", target), &target, |b, target| {
             b.iter(|| state.apply_1q_index(*target, gate.matrix()))
         });
 
-        let mut state = State::zero(n).unwrap();
+        let mut state = state::State::zero(n).unwrap();
         group.bench_with_input(
             BenchmarkId::new("Kronecker", target),
             &target,
@@ -75,7 +80,7 @@ fn bench_1q_index_kernel_over_target(c: &mut Criterion) {
     for target in targets {
         let gate = Gate::H { target };
 
-        let mut state = State::zero(n).unwrap();
+        let mut state = state::State::zero(n).unwrap();
         group.bench_with_input(BenchmarkId::new("Target", target), &target, |b, target| {
             b.iter(|| state.apply_1q_index(*target, gate.matrix()))
         });
@@ -482,6 +487,42 @@ fn bench_matrix_construction(c: &mut Criterion) {
             black_box(res);
         })
     });
+
+    group.finish();
+}
+
+/// Benchmarks the existing `state` implementation against the new
+/// `new_state` implementation by executing equivalent QFT circuits
+/// at different qubit counts.
+fn bench_legacy_vs_current_state_with_qft(c: &mut Criterion) {
+    let mut group = c.benchmark_group("QFT Statevector Performance");
+    group.measurement_time(Duration::from_secs(30));
+
+    // Size of benchmark
+    let parameters: [usize; 10] = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20];
+
+    for n in parameters {
+        let legacy_circuit = construct_qft_for_legacy(n);
+        let current_circuit = construct_qft_for_current(n);
+
+        group.bench_with_input(BenchmarkId::new("legacy", n), &n, |b, _| {
+            b.iter(|| {
+                let mut state = black_box(state::State::zero(n).unwrap());
+                for g in &legacy_circuit {
+                    state.apply_gate(*g).unwrap();
+                }
+            })
+        });
+
+        group.bench_with_input(BenchmarkId::new("current", n), &n, |b, _| {
+            b.iter(|| {
+                let mut state = black_box(new_state::State::zero(n).unwrap());
+                for i in &current_circuit {
+                    state.execute(*i).unwrap();
+                }
+            })
+        });
+    }
 
     group.finish();
 }
