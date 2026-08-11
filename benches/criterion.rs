@@ -1,114 +1,129 @@
-// Only compiles if the "bench" feature is enabled since otherwise many Qsim functions are private.
+// Only compiles if the `bench` feature is enabled since otherwise many qsim functions are private.
 #![cfg(feature = "bench")]
-
-// This benchmark will often use depracated functions for comparison.
-#![allow(deprecated)]
 
 use std::{hint::black_box, time::Duration};
 
-use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use ndarray::Array2;
-use qsim::{gates::Gate, state::State};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use ndarray::{array, Array1, Array2};
+use num_complex::Complex;
+use rand::{rng, RngExt};
 
-// For the first benchmark test I will compare the index and kron methods
-fn bench_kernels_1q_over_target(c: &mut Criterion) {
-    let mut group = c.benchmark_group("1Q Idx & Kron Kernels (T=[0..=7], n=8)");
+use qsim::{
+    gates::Gate,
+    linalg::{linear_map, SquareMatrix, Vector},
+    state::State,
+};
+
+// Active benchmarks.
+criterion_group!(
+    benches,
+    bench_vector_zero_initialisation,
+    bench_matrix_zero_initialisation,
+    bench_vector_sequential_traversal,
+    bench_matrix_sequential_traversal,
+    bench_vector_random_access,
+    bench_matrix_random_access,
+    bench_matrix_vector_mul_on_pairs,
+    bench_matrix_construction,
+);
+
+criterion_main!(benches);
+
+// STATE IMPLEMENTATION
+
+/// Compares the index and Kronecker-product implementations of a
+/// single-qubit gate across different target qubits.
+#[allow(deprecated, unused)]
+fn bench_1q_kernels_index_vs_kronecker(c: &mut Criterion) {
+    let mut group = c.benchmark_group("1Q Index vs Kronecker");
     group.measurement_time(Duration::from_secs(8));
 
     let n = 8;
-    let targets = [0, 1, 2, 3, 4, 5, 6, 7];
+
+    for target in 0..n {
+        let gate = Gate::H { target };
+
+        let mut state = State::zero(n).unwrap();
+        group.bench_with_input(BenchmarkId::new("Index", target), &target, |b, target| {
+            b.iter(|| state.apply_1q_index(*target, gate.matrix()))
+        });
+
+        let mut state = State::zero(n).unwrap();
+        group.bench_with_input(
+            BenchmarkId::new("Kronecker", target),
+            &target,
+            |b, target| b.iter(|| state.apply_1q_kron(*target, gate.matrix())),
+        );
+    }
+
+    group.finish();
+}
+
+/// Benchmarks the 1-qubit index kernel at the first, middle, and last
+/// target qubits of a circuit.
+#[allow(unused)]
+fn bench_1q_index_kernel_over_target(c: &mut Criterion) {
+    let mut group = c.benchmark_group("1Q Index Kernel by Target");
+
+    let n = 7;
+    let targets = [
+        0,
+        n / 2,
+        n - 1
+    ];
 
     for target in targets {
         let gate = Gate::H { target };
 
         let mut state = State::zero(n).unwrap();
-        group.bench_with_input(
-            BenchmarkId::new("1Q-Idx", target),
-            &target,
-            |b, target| b.iter(
-                || state.apply_1q_index(*target, gate.matrix())
-            )
-        );
-
-        let mut state = State::zero(n).unwrap();
-        group.bench_with_input(
-            BenchmarkId::new("1Q-Kron", target),
-            &target,
-            |b, target| b.iter(
-                || state.apply_1q_kron(*target, gate.matrix())
-            )
-        );
+        group.bench_with_input(BenchmarkId::new("Target", target), &target, |b, target| {
+            b.iter(|| state.apply_1q_index(*target, gate.matrix()))
+        });
     }
 
     group.finish();
 }
 
-/// This benchmark tests the 1 Qubit Index kernel at a circuit size of 7 by applying a Hadamard gate with a target qubit
-/// of the first, middle 
-fn bench_1q_index_kernel_over_target(c: &mut Criterion) {
-    let mut group = c.benchmark_group("1Q Idx Kernel (t=[0, 3, 6], n=7)");
+// QSIM LINEAR ALGEBRA VS NDARRAY
 
-    let n = 7;
-    for target in [0, 3, 6] {
-        let gate = Gate::H { target };
-
-        let mut state = State::zero(n).unwrap();
-        group.bench_with_input(
-            BenchmarkId::new("1Q-Index", target),
-            &target,
-            |b, target| b.iter(
-                || state.apply_1q_index(*target, gate.matrix())
-            )
-        );
-    }
-
-    group.finish();
-}
-
-// CUSTOM VS NDARRAY BENCHES
-
-// Test construction of Matrix class against ndarray::Array2
-fn bench_matrix_construction(c: &mut Criterion) {
-    use qsim::linalg::SquareMatrix;
-    use ndarray::Array2;
-    use num_complex::Complex;
-
-    let mut group = c.benchmark_group("Matrix Construction");
+/// Benchmarks construction of square matrices across a range of sizes,
+/// comparing the qsim and ndarray implementations.
+#[allow(unused)]
+fn bench_matrix_zero_initialisation(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Matrix Zero Initialisation");
 
     // Sizes of N x N matrices.
-    let sizes = [2, 4, 8, 16, 32, 64, 128, 256];
+    let sizes = [
+        2,
+        4,
+        8,
+        16,
+        32,
+        64,
+        128,
+        256
+    ];
 
     for size in sizes {
+        group.bench_with_input(BenchmarkId::new("qsim", size), &size, |b, &size| {
+            b.iter(|| black_box(SquareMatrix::zero(size)))
+        });
 
-        group.bench_with_input(
-            BenchmarkId::new("Matrix", size),
-            &size,
-            |b, &size| b.iter(
-                || black_box(SquareMatrix::zero(size))
-            )
-        );
-
-        group.bench_with_input(
-            BenchmarkId::new("Ndarray", size),
-            &size,
-            |b, &size| b.iter(
-                || black_box(Array2::<Complex<f64>>::zeros((size, size)))
-            )
-        );
+        group.bench_with_input(BenchmarkId::new("ndarray", size), &size, |b, &size| {
+            b.iter(|| black_box(Array2::<Complex<f64>>::zeros((size, size))))
+        });
     }
 
     group.finish();
 }
 
-// Test construction of Vector class against ndarray::Array1
-fn bench_vector_construction(c: &mut Criterion) {
-    use qsim::linalg::Vector;
-    use ndarray::Array1;
-    use num_complex::Complex;
+/// Benchmarks construction of vectors across a range of sizes,
+/// comparing the qsim and ndarray implementations.
+#[allow(unused)]
+fn bench_vector_zero_initialisation(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Vector Zero Initialisation");
 
-    let mut group = c.benchmark_group("Vector Construction");
-
-    // Sizes of vectors.
+    // Vector sizes.
     let sizes = [
         1,
         4,
@@ -124,98 +139,82 @@ fn bench_vector_construction(c: &mut Criterion) {
     ];
 
     for size in sizes {
+        group.bench_with_input(BenchmarkId::new("qsim", size), &size, |b, &size| {
+            b.iter(|| black_box(Vector::zeros(size)))
+        });
 
-        group.bench_with_input(
-            BenchmarkId::new("Vector", size),
-            &size,
-            |b, &size| b.iter(
-                || black_box(Vector::zeros(size))
-            )
-        );
-
-        group.bench_with_input(
-            BenchmarkId::new("Array1", size),
-            &size,
-            |b, &size| b.iter(
-                || black_box(Array1::<Complex<f64>>::zeros(size))
-            )
-        );
+        group.bench_with_input(BenchmarkId::new("ndarray", size), &size, |b, &size| {
+            b.iter(|| black_box(Array1::<Complex<f64>>::zeros(size)))
+        });
     }
 
     group.finish();
 }
 
-// Test traversing Matrix sequentially against ndarray::Array2
+/// Benchmarks sequential matrix traversal across a range of sizes,
+/// comparing the qsim and ndarray implementations.
+#[allow(unused)]
 fn bench_matrix_sequential_traversal(c: &mut Criterion) {
-    use qsim::linalg::SquareMatrix;
-    use ndarray::Array2;
-    use num_complex::Complex;
-
     let mut group = c.benchmark_group("Matrix Sequential Read");
     group.measurement_time(Duration::from_secs(10));
 
-    // Sizes of N x N matrices.
-    let parameters = [(16, 4096), (32, 1024), (64, 256), (128, 64)];
+    // Matrix dimensions and traversal counts.
+    // Each configuration performs 1,048,576 element reads.
+    let parameters = [
+        (16, 4_096),
+        (32, 1_024),
+        (64, 256),
+        (128, 64)
+    ];
 
     for (size, traversals) in parameters {
-        // Construct Matrices
-        let my_impl = SquareMatrix::zero(size);
-        let nd_impl = Array2::<Complex<f64>>::zeros((size, size));
+        let qsim_matrix = SquareMatrix::zero(size);
+        let ndarray_matrix = Array2::<Complex<f64>>::zeros((size, size));
 
-        group.bench_with_input(
-            BenchmarkId::new("Matrix", size),
-            &size,
-            |b, &size| b.iter(
-                || {
-                    let mut sum = Complex::<f64>::ZERO;
+        group.bench_with_input(BenchmarkId::new("qsim", size), &size, |b, &size| {
+            b.iter(|| {
+                let mut sum = Complex::<f64>::ZERO;
 
-                    for _ in 0..traversals {
-                        for row in 0..size {
-                            for col in 0..size {
-                                sum += my_impl.get(row, col);
-                            }
+                for _ in 0..traversals {
+                    for row in 0..size {
+                        for col in 0..size {
+                            sum += qsim_matrix.get(row, col);
                         }
                     }
-
-                    black_box(sum);
                 }
-            )
-        );
 
-        group.bench_with_input(
-            BenchmarkId::new("Ndarray", size),
-            &size,
-            |b, &size| b.iter(
-                || {
-                    let mut sum = Complex::<f64>::ZERO;
+                black_box(sum);
+            })
+        });
 
-                    for _ in 0..traversals {
-                        for row in 0..size {
-                            for col in 0..size {
-                                sum += nd_impl[(row, col)];
-                            }
+        group.bench_with_input(BenchmarkId::new("ndarray", size), &size, |b, &size| {
+            b.iter(|| {
+                let mut sum = Complex::<f64>::ZERO;
+
+                for _ in 0..traversals {
+                    for row in 0..size {
+                        for col in 0..size {
+                            sum += ndarray_matrix[(row, col)];
                         }
                     }
-
-                    black_box(sum);
                 }
-            )
-        );
+
+                black_box(sum);
+            })
+        });
     }
 
     group.finish();
 }
 
-// Test traversing Vector sequentially against ndarray::Array1
+/// Benchmarks sequential vector traversal across a range of sizes,
+/// comparing the qsim and ndarray implementations.
+#[allow(unused)]
 fn bench_vector_sequential_traversal(c: &mut Criterion) {
-    use qsim::linalg::Vector;
-    use ndarray::Array1;
-    use num_complex::Complex;
-
     let mut group = c.benchmark_group("Vector Sequential Read");
     group.measurement_time(Duration::from_secs(10));
 
-    // Vector lengths and traversals.
+    // Vector lengths and traversal counts.
     // Each configuration performs 1,048,576 element reads.
     let parameters = [
         (1, 1_048_576),
@@ -232,126 +231,103 @@ fn bench_vector_sequential_traversal(c: &mut Criterion) {
     ];
 
     for (size, traversals) in parameters {
-        // Construct Matrices
-        let my_impl = Vector::zeros(size);
-        let nd_impl = Array1::<Complex<f64>>::zeros(size);
+        let qsim_vector = Vector::zeros(size);
+        let ndarray_vector = Array1::<Complex<f64>>::zeros(size);
 
-        group.bench_with_input(
-            BenchmarkId::new("Vector", size),
-            &size,
-            |b, &size| b.iter(
-                || {
-                    let mut sum = Complex::<f64>::ZERO;
+        group.bench_with_input(BenchmarkId::new("qsim", size), &size, |b, &size| {
+            b.iter(|| {
+                let mut sum = Complex::<f64>::ZERO;
 
-                    for _ in 0..traversals {
-                        for i in 0..size {
-                            sum += my_impl.get(i);
-                        }
+                for _ in 0..traversals {
+                    for i in 0..size {
+                        sum += qsim_vector.get(i);
                     }
-
-                    black_box(sum);
                 }
-            )
-        );
 
-        group.bench_with_input(
-            BenchmarkId::new("Array1", size),
-            &size,
-            |b, &size| b.iter(
-                || {
-                    let mut sum = Complex::<f64>::ZERO;
+                black_box(sum);
+            })
+        });
 
-                    for _ in 0..traversals {
-                        for i in 0..size {
-                            sum += nd_impl[i];
-                        }
+        group.bench_with_input(BenchmarkId::new("ndarray", size), &size, |b, &size| {
+            b.iter(|| {
+                let mut sum = Complex::<f64>::ZERO;
+
+                for _ in 0..traversals {
+                    for i in 0..size {
+                        sum += ndarray_vector[i];
                     }
-
-                    black_box(sum);
                 }
-            )
-        );
+
+                black_box(sum);
+            })
+        });
     }
 
     group.finish();
 }
 
-// Test traversing Matrix sequentially against ndarray::Array2
-fn bench_matrix_random_traversal(c: &mut Criterion) {
-    use qsim::linalg::SquareMatrix;
-
-    use ndarray::Array2;
-    use num_complex::Complex;
-    use rand::{rng, RngExt};
-
+/// Benchmarks random matrix element access across a range of sizes,
+/// comparing the qsim and ndarray implementations.
+#[allow(unused)]
+fn bench_matrix_random_access(c: &mut Criterion) {
     let mut group = c.benchmark_group("Matrix Random Read");
     group.measurement_time(Duration::from_secs(10));
 
-    // Sizes of N x N matrices.
-    let parameters = [(16, 4096), (32, 1024), (64, 256), (128, 64)];
+    // Matrix sizes and number of random reads.
+    // Each configuration performs 1,048,576 element reads.
+    let parameters = [
+        (16, 4096),
+        (32, 1024),
+        (64, 256),
+        (128, 64)
+    ];
 
-    for (size, accesses) in parameters {
-        // Construct Matrices
-        let my_impl = SquareMatrix::zero(size);
-        let nd_impl = Array2::<Complex<f64>>::zeros((size, size));
+    for (size, num_accesses) in parameters {
+        let qsim_matrix = SquareMatrix::zero(size);
+        let ndarray_matrix = Array2::<Complex<f64>>::zeros((size, size));
 
-        // Generate random coordinates
+        // Generate random coordinates for each access.
         let mut rng = rng();
-        let coords: Vec<(usize, usize)> = (0..(accesses*size*size))
-            .map(|_| (
-                rng.random_range(0..size),
-                rng.random_range(0..size)
-            ))
+        let coords: Vec<(usize, usize)> = (0..(num_accesses * size * size))
+            .map(|_| (rng.random_range(0..size), rng.random_range(0..size)))
             .collect();
 
-        group.bench_with_input(
-            BenchmarkId::new("Matrix", size),
-            &size,
-            |b, _| b.iter(
-                || {
-                    let mut sum = Complex::<f64>::ZERO;
+        group.bench_with_input(BenchmarkId::new("qsim", size), &size, |b, _| {
+            b.iter(|| {
+                let mut sum = Complex::<f64>::ZERO;
 
-                    for &(row, col) in &coords {
-                        sum += my_impl.get(row, col);
-                    }
-
-                    black_box(sum);
+                for &(row, col) in &coords {
+                    sum += qsim_matrix.get(row, col);
                 }
-            )
-        );
 
-        group.bench_with_input(
-            BenchmarkId::new("Ndarray", size),
-            &size,
-            |b, _| b.iter(
-                || {
-                    let mut sum = Complex::<f64>::ZERO;
+                black_box(sum);
+            })
+        });
 
-                    for &(row, col) in &coords {
-                        sum += nd_impl[(row, col)];
-                    }
+        group.bench_with_input(BenchmarkId::new("ndarray", size), &size, |b, _| {
+            b.iter(|| {
+                let mut sum = Complex::<f64>::ZERO;
 
-                    black_box(sum);
+                for &(row, col) in &coords {
+                    sum += ndarray_matrix[(row, col)];
                 }
-            )
-        );
+
+                black_box(sum);
+            })
+        });
     }
 
     group.finish();
 }
 
-// Test traversing Vector sequentially against ndarray::Array1
-fn bench_vector_random_traversal(c: &mut Criterion) {
-    use qsim::linalg::Vector;
-
-    use ndarray::Array1;
-    use num_complex::Complex;
-    use rand::{rng, RngExt};
-
+/// Benchmarks random vector element access across a range of lengths,
+/// comparing the qsim and ndarray implementations.
+#[allow(unused)]
+fn bench_vector_random_access(c: &mut Criterion) {
     let mut group = c.benchmark_group("Vector Random Read");
     group.measurement_time(Duration::from_secs(10));
 
-    // Vector lengths and traversals.
+    // Vector lengths and number of random reads.
     // Each configuration performs 1,048,576 element reads.
     let parameters = [
         (1, 1_048_576),
@@ -367,217 +343,145 @@ fn bench_vector_random_traversal(c: &mut Criterion) {
         (1_048_576, 1),
     ];
 
-    for (size, accesses) in parameters {
-        // Construct Matrices
-        let my_impl = Vector::zeros(size);
-        let nd_impl = Array1::<Complex<f64>>::zeros(size);
+    for (size, num_accesses) in parameters {
+        let qsim_vector = Vector::zeros(size);
+        let ndarray_vector = Array1::<Complex<f64>>::zeros(size);
 
-        // Generate random coordinates
+        // Generate random coordinates for each access.
         let mut rng = rng();
-        let indices: Vec<usize> = (0..(accesses*size))
+        let indices: Vec<usize> = (0..(num_accesses * size))
             .map(|_| rng.random_range(0..size))
             .collect();
 
-        group.bench_with_input(
-            BenchmarkId::new("Vector", size),
-            &size,
-            |b, _| b.iter(
-                || {
-                    let mut sum = Complex::<f64>::ZERO;
+        group.bench_with_input(BenchmarkId::new("qsim", size), &size, |b, _| {
+            b.iter(|| {
+                let mut sum = Complex::<f64>::ZERO;
 
-                    for &i in &indices {
-                        sum += my_impl.get(i);
-                    }
-
-                    black_box(sum);
+                for &i in &indices {
+                    sum += qsim_vector.get(i);
                 }
-            )
-        );
 
-        group.bench_with_input(
-            BenchmarkId::new("Array1", size),
-            &size,
-            |b, _| b.iter(
-                || {
-                    let mut sum = Complex::<f64>::ZERO;
+                black_box(sum);
+            })
+        });
 
-                    for &i in &indices {
-                        sum += nd_impl[i];
-                    }
+        group.bench_with_input(BenchmarkId::new("ndarray", size), &size, |b, _| {
+            b.iter(|| {
+                let mut sum = Complex::<f64>::ZERO;
 
-                    black_box(sum);
+                for &i in &indices {
+                    sum += ndarray_vector[i];
                 }
-            )
-        );
+
+                black_box(sum);
+            })
+        });
     }
 
     group.finish();
 }
 
+/// Benchmarks 2x2 matrix-vector multiplication,
+/// comparing the qsim and ndarray implementations.
+#[allow(unused)]
 fn bench_matrix_vector_mul_on_pairs(c: &mut Criterion) {
-    use qsim::linalg::Vector;
-    use qsim::linalg::SquareMatrix;
-    use qsim::linalg::linear_map;
-
-    use ndarray::Array1;
-    use num_complex::Complex;
-    use rand::{rng, RngExt};
-
-    let mut group = c.benchmark_group("Mat-Vec Multiplication");
+    let mut group = c.benchmark_group("Matrix-Vector Multiplication");
 
     let size = 2;
 
     // Construct Vectors and Matrices.
-    let mut my_vec_impl = Vector::zeros(size);
-    let mut my_mat_impl = SquareMatrix::zero(size);
-    let mut nd_vec_impl = Array1::<Complex<f64>>::zeros(size);
-    let mut nd_mat_impl = Array2::<Complex<f64>>::zeros((size, size));
+    let mut qsim_vector = Vector::zeros(size);
+    let mut qsim_matrix = SquareMatrix::zero(size);
+    let mut ndarray_vector = Array1::<Complex<f64>>::zeros(size);
+    let mut ndarray_matrix = Array2::<Complex<f64>>::zeros((size, size));
 
     // Generate random values.
     let mut rng = rng();
     for i in 0..size {
-        let random_complex = Complex::<f64>::new(
-            rng.random(),
-            rng.random()
-        );
+        let random_complex = Complex::<f64>::new(rng.random(), rng.random());
 
-        *my_vec_impl.get_mut(i) = random_complex;
-        nd_vec_impl[i] = random_complex;
+        *qsim_vector.get_mut(i) = random_complex;
+        ndarray_vector[i] = random_complex;
 
         for j in 0..size {
-            let random_complex = Complex::<f64>::new(
-                rng.random(),
-                rng.random()
-            );
+            let random_complex = Complex::<f64>::new(rng.random(), rng.random());
 
-            *my_mat_impl.get_mut(i, j) = random_complex;
-            nd_mat_impl[(i, j)] = random_complex;
+            *qsim_matrix.get_mut(i, j) = random_complex;
+            ndarray_matrix[(i, j)] = random_complex;
         }
     }
 
-    group.bench_with_input(
-        BenchmarkId::new("Custom", size),
-        &size,
-        |b, _| b.iter(
-            || {
-                let res = linear_map(&my_mat_impl, &my_vec_impl);
-                black_box(res);
-            }
-        )
-    );
+    group.bench_with_input(BenchmarkId::new("qsim", size), &size, |b, _| {
+        b.iter(|| {
+            let res = linear_map(&qsim_matrix, &qsim_vector);
+            black_box(res);
+        })
+    });
 
-    group.bench_with_input(
-        BenchmarkId::new("ndarray", size),
-        &size,
-        |b, _| b.iter(
-            || {
-                let res = nd_mat_impl.dot(&nd_vec_impl);
-                black_box(res);
-            }
-        )
-    );
+    group.bench_with_input(BenchmarkId::new("ndarray", size), &size, |b, _| {
+        b.iter(|| {
+            let res = ndarray_matrix.dot(&ndarray_vector);
+            black_box(res);
+        })
+    });
 
     group.finish();
 }
 
-fn bench_mat_constructors(c: &mut Criterion) {
-    use qsim::linalg::SquareMatrix;
-
-    use num_complex::Complex;
-    use ndarray::array;
-
-    let mut group = c.benchmark_group("Mat constructors");
+/// Benchmarks different 2x2 matrix constructors, comparing qsim options and ndarray.
+#[allow(deprecated, unused)]
+fn bench_matrix_construction(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Matrix Construction");
     group.measurement_time(Duration::from_secs(10));
 
-    let loops = 1;
     let size = 2;
     let values = [
         [Complex::<f64>::new(0.1, 0.25), Complex::<f64>::new(0.15, 0.5)],
-        [Complex::<f64>::new(-0.5, 0.26), Complex::<f64>::new(0.101, 1.5)]
+        [Complex::<f64>::new(-0.5, 0.26), Complex::<f64>::new(0.101, 1.5)],
     ];
 
-    group.bench_with_input(
-        BenchmarkId::new("Zero", size),
-        &size,
-        |b, _| b.iter(
-            || {
-                for _ in 0..loops {
-                    let mut res = SquareMatrix::zero(size);
-                    for (i, row) in values.iter().enumerate() {
-                        for (j, elem) in row.iter().enumerate() {
-                            *res.get_mut(i, j) = *elem;
-                        }
-                    }
-                    black_box(res);
+    group.bench_with_input(BenchmarkId::new("qsim/zero + fill", size), &size, |b, _| {
+        b.iter(|| {
+            let mut res = SquareMatrix::zero(size);
+            for (i, row) in values.iter().enumerate() {
+                for (j, elem) in row.iter().enumerate() {
+                    *res.get_mut(i, j) = *elem;
                 }
             }
-        )
-    );
+            black_box(res);
+        })
+    });
+
+    group.bench_with_input(BenchmarkId::new("qsim/from_array", size), &size, |b, _| {
+        b.iter(|| {
+            let res = SquareMatrix::from_array([
+                [(0.1, 0.25), (0.15, 0.5)],
+                [(-0.5, 0.26), (0.101, 1.5)],
+            ]);
+            black_box(res);
+        })
+    });
 
     group.bench_with_input(
-        BenchmarkId::new("From Array", size),
+        BenchmarkId::new("qsim/from_array (legacy)", size),
         &size,
-        |b, _| b.iter(
-            || {
-                for _ in 0..loops {
-                    let res = SquareMatrix::from_array([
-                        [(0.1, 0.25), (0.15, 0.5)],
-                        [(-0.5, 0.26), (0.101, 1.5)]
-                    ]);
-                    black_box(res);
-                }
-            }
-        )
+        |b, _| {
+            b.iter(|| {
+                let res = SquareMatrix::from_array_2(values);
+                black_box(res);
+            })
+        },
     );
 
-    group.bench_with_input(
-        BenchmarkId::new("From Array (depracated)", size),
-        &size,
-        |b, _| b.iter(
-            || {
-                for _ in 0..loops {
-                    let res = SquareMatrix::from_array_2(values);
-                    black_box(res);
-                }
-            }
-        )
-    );
-
-    group.bench_with_input(
-        BenchmarkId::new("ndarray::array!", size),
-        &size,
-        |b, _| b.iter(
-            || {
-                for _ in 0..loops {
-                    let res = array![
-                        [Complex::<f64>::new(0.1, 0.25), Complex::<f64>::new(0.15, 0.5)],
-                        [Complex::<f64>::new(-0.5, 0.26), Complex::<f64>::new(0.101, 1.5)]
-                    ];
-                    black_box(res);
-                }
-            }
-        )
-    );
+    group.bench_with_input(BenchmarkId::new("ndarray/array!", size), &size, |b, _| {
+        b.iter(|| {
+            let res = array![
+                [Complex::<f64>::new(0.1, 0.25), Complex::<f64>::new(0.15, 0.5)],
+                [Complex::<f64>::new(-0.5, 0.26), Complex::<f64>::new(0.101, 1.5)]
+            ];
+            black_box(res);
+        })
+    });
 
     group.finish();
 }
-
-criterion_group!(
-    // Name of function group for benchmarking.
-    benches,
-
-    // Targets to add to the function group.
-    //bench_kernels_1q_over_target,
-    //bench_1q_index_kernel_over_target,
-    //bench_matrix_construction,
-    //bench_vector_construction,
-    //bench_matrix_sequential_traversal,
-    //bench_vector_sequential_traversal,
-    //bench_matrix_random_traversal
-    //bench_vector_random_traversal,
-    //bench_matrix_vector_mul_on_pairs,
-    bench_mat_constructors
-);
-
-// Takes the function group and expands into the program's entry point.
-criterion_main!(benches);
