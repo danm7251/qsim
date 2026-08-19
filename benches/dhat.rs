@@ -10,7 +10,7 @@ use num_complex::Complex;
 use qsim::{
     api::Instruction,
     legacy::{LegacyState, gates::Gate},
-    linalg::{SquareMatrix, Vector, linear_map, matrix},
+    linalg::{SquareMatrix, Vector, linear_map},
     state::State,
 };
 
@@ -128,94 +128,6 @@ fn benchmarks() -> Vec<BenchGroup> {
             name: "QFT Statevector Performance",
             active: false,
             cases,
-        }
-    );
-
-    // 1Q INDEX VS STRIDED KERNEL
-
-    let parameters: [usize; 8] = [2, 4, 6, 8, 10, 12, 14, 16];
-
-    let mut cases = Vec::<BenchCase>::new();
-    for n in parameters {
-        cases.push({
-            let mut state = State::zero(n).unwrap();
-            let matrix = matrix::x();
-
-            BenchCase {
-                name: format!("indexed-{n}"),
-                bench: Box::new(move || {
-                    // Black box unneeded.
-                    state.apply_1q(n / 2, &matrix).unwrap();
-                }),
-            }
-        });
-
-        cases.push({
-            let mut state = State::zero(n).unwrap();
-            let matrix = matrix::h();
-
-            BenchCase {
-                name: format!("strided-{n}"),
-                bench: Box::new(move || {
-                    // Black box unneeded.
-                    // If `linear_map()` is inlined application becomes allocation free.
-                    state.apply_1q_strided(0, &matrix).unwrap();
-                }),
-            }
-        });
-    }
-
-    benches.push(
-        BenchGroup {
-            name: "1Q Index & Strided Kernel Performance",
-            active: false,
-            cases
-        }
-    );
-
-    // C2Q INDEX VS STRIDED KERNEL
-
-    let parameters: [usize; 7] = [4, 6, 8, 10, 12, 14, 16];
-
-    let mut cases = Vec::<BenchCase>::new();
-    for n in parameters {
-        // Keep the control/target separation fixed as n scales.
-        let control = (n / 2) - 1;
-        let target = (n / 2) + 1;
-
-        cases.push({
-            let mut state = State::zero(n).unwrap();
-            let matrix = matrix::h();
-
-            BenchCase {
-                name: format!("indexed-{n}"),
-                bench: Box::new(move || {
-                    // Black box unneeded.
-                    state.apply_c2q(control, target, &matrix).unwrap();
-                }),
-            }
-        });
-
-        cases.push({
-            let mut state = State::zero(n).unwrap();
-            let matrix = matrix::h();
-
-            BenchCase {
-                name: format!("strided-{n}"),
-                bench: Box::new(move || {
-                    // Black box unneeded.
-                    // If `linear_map()` is inlined application becomes allocation free.
-                    state.apply_c2q_strided(control, target, &matrix).unwrap();
-                }),
-            }
-        });
-    }
-
-    benches.push(
-        BenchGroup {
-            name: "C2Q Index & Strided Kernel Performance",
-            active: true,
-            cases
         }
     );
 
