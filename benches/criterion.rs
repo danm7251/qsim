@@ -9,8 +9,8 @@ use num_complex::Complex;
 use rand::{rng, RngExt};
 
 use qsim::{
-    legacy::{gates::Gate, LegacyState},
-    linalg::{linear_map, SquareMatrix, Vector},
+    legacy::{LegacyState, gates::Gate},
+    linalg::{SquareMatrix, Vector, linear_map, matrix},
     state::State,
 };
 
@@ -20,20 +20,12 @@ use common::{construct_qft_for_current, construct_qft_for_legacy};
 // Active benchmarks.
 criterion_group!(
     benches,
-    bench_vector_zero_initialisation,
-    bench_matrix_zero_initialisation,
-    bench_vector_sequential_traversal,
-    bench_matrix_sequential_traversal,
-    bench_vector_random_access,
-    bench_matrix_random_access,
-    bench_matrix_vector_mul_on_pairs,
-    bench_matrix_construction,
-    bench_legacy_vs_current_state_with_qft
+    bench_c2q_kernels_index_vs_strided,
 );
 
 criterion_main!(benches);
 
-// STATE IMPLEMENTATION
+// KERNEL COMPARISONS
 
 /// Compares the index and Kronecker-product implementations of a
 /// single-qubit gate across different target qubits.
@@ -83,6 +75,98 @@ fn bench_1q_index_kernel_over_target(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("Target", target), &target, |b, target| {
             b.iter(|| state.apply_1q_index(*target, gate.matrix()))
         });
+    }
+
+    group.finish();
+}
+
+/// Benchmarks the indexed and strided C2Q kernels across representative
+/// control/target qubit configurations for both traversal cases.
+#[allow(unused)]
+fn bench_1q_kernels_index_vs_strided(c: &mut Criterion) {
+    let mut group = c.benchmark_group("1Q Index vs Strided");
+    group.measurement_time(Duration::from_secs(5));
+
+    let n = 12;
+
+    for target in 0..n {
+        
+        let matrix = matrix::h();
+        let mut state = State::zero(n).unwrap();
+        group.bench_with_input(
+            BenchmarkId::new("Index", target),
+            &target,
+            |b, target|
+            b.iter(|| black_box(state.apply_1q(*target, &matrix).unwrap()))
+        );
+
+        let matrix = matrix::h();
+        let mut state = State::zero(n).unwrap();
+        group.bench_with_input(
+            BenchmarkId::new("Strided", target),
+            &target,
+            |b, target|
+            b.iter(|| black_box(state.apply_1q_strided(*target, &matrix))),
+        );
+    }
+
+    group.finish();
+}
+
+#[allow(deprecated, nused)]
+fn bench_c2q_kernels_index_vs_strided(c: &mut Criterion) {
+    let num_q = 12;
+
+    let c_greater_than_t = [
+        (6, 5),
+        (6, 4),
+        (6, 2),
+    ];
+
+    let c_less_than_t = [
+        (5, 6),
+        (4, 7),
+        (2, 10),
+    ];
+
+    let mut group = c.benchmark_group("C2Q Index vs Strided (C > T)");
+    group.measurement_time(Duration::from_secs(5));
+
+    for &(control, target) in &c_greater_than_t {
+        let matrix = matrix::h();
+        let mut state = State::zero(num_q).unwrap();
+        group.bench_function(
+            BenchmarkId::new("Index", format!("c={control},t={target}")),
+            |b| b.iter(|| black_box(state.apply_c2q(control, target, &matrix).unwrap()))            
+        );
+
+        let matrix = matrix::h();
+        let mut state = State::zero(num_q).unwrap();
+        group.bench_function(
+            BenchmarkId::new("Strided", format!("c={control},t={target}")),
+            |b| b.iter(|| black_box(state.apply_c2q_strided(control, target, &matrix).unwrap()))            
+        );
+    }
+
+    group.finish();
+
+    let mut group = c.benchmark_group("C2Q Index vs Strided (C < T)");
+    group.measurement_time(Duration::from_secs(5));
+
+    for &(control, target) in &c_less_than_t {
+        let matrix = matrix::h();
+        let mut state = State::zero(num_q).unwrap();
+        group.bench_function(
+            BenchmarkId::new("Index", format!("c={control},t={target}")),
+            |b| b.iter(|| black_box(state.apply_c2q(control, target, &matrix).unwrap()))            
+        );
+
+        let matrix = matrix::h();
+        let mut state = State::zero(num_q).unwrap();
+        group.bench_function(
+            BenchmarkId::new("Strided", format!("c={control},t={target}")),
+            |b| b.iter(|| black_box(state.apply_c2q_strided(control, target, &matrix).unwrap()))            
+        );
     }
 
     group.finish();
@@ -493,6 +577,7 @@ fn bench_matrix_construction(c: &mut Criterion) {
 /// Benchmarks the existing `state` implementation against the new
 /// `new_state` implementation by executing equivalent QFT circuits
 /// at different qubit counts.
+#[allow(unused)]
 fn bench_legacy_vs_current_state_with_qft(c: &mut Criterion) {
     let mut group = c.benchmark_group("QFT Statevector Performance");
     group.measurement_time(Duration::from_secs(30));

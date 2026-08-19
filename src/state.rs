@@ -89,17 +89,17 @@ impl State {
     pub fn execute(&mut self, cmd: Instruction) -> Result<(), &'static str> {
         match cmd {
             // One Qubit Gates
-            X { q } => self.apply_1q(q, matrix::x()),
-            Y { q } => self.apply_1q(q, matrix::y()),
-            Z { q } => self.apply_1q(q, matrix::z()),
-            H { q } => self.apply_1q(q, matrix::h()),
-            S { q } => self.apply_1q(q, matrix::s()),
-            T { q } => self.apply_1q(q, matrix::t()),
-            P { q, phi } => self.apply_1q(q, matrix::p(phi)),
+            X { q } => self.apply_1q_strided(q, &matrix::x()),
+            Y { q } => self.apply_1q_strided(q, &matrix::y()),
+            Z { q } => self.apply_1q_strided(q, &matrix::z()),
+            H { q } => self.apply_1q_strided(q, &matrix::h()),
+            S { q } => self.apply_1q_strided(q, &matrix::s()),
+            T { q } => self.apply_1q_strided(q, &matrix::t()),
+            P { q, phi } => self.apply_1q_strided(q, &matrix::p(phi)),
 
             // Controlled One Qubit Gates
-            CNOT { q_c, q_t } => self.apply_c2q(q_c, q_t, matrix::x()),
-            CRP { q_c, q_t, phi } => self.apply_c2q(q_c, q_t, matrix::p(phi)),
+            CNOT { q_c, q_t } => self.apply_c2q_strided(q_c, q_t, &matrix::x()),
+            CRP { q_c, q_t, phi } => self.apply_c2q_strided(q_c, q_t, &matrix::p(phi)),
 
             // Two Qubit Gates
             SWAP { .. } => unimplemented!("SWAP is unimplemented!"),
@@ -112,9 +112,10 @@ impl State {
     // Gate kernels
 
     /// Applies a single-qubit gate to all amplitude pairs associated with `target`.
+    #[deprecated]
     #[cfg_attr(feature = "bench", visibility::make(pub))]
-    #[cfg_attr(feature = "trace", tracing::instrument(skip(self, gate_matrix), name = "1 Qubit Gate", err))]
-    fn apply_1q(&mut self, target: usize, gate_matrix: SquareMatrix) -> Result<(), &'static str> {
+    #[cfg_attr(feature = "trace", tracing::instrument(skip(self, gate_matrix), name = "1 Qubit Gate Indexed", err))]
+    fn apply_1q(&mut self, target: usize, gate_matrix: &SquareMatrix) -> Result<(), &'static str> {
         if target >= self.n {
             return Err("Target qubit does not exist");
         }
@@ -130,7 +131,40 @@ impl State {
                 ]);
 
                 // Apply the gate to the subspace.
-                let updated_pair = linear_map(&gate_matrix, &pair);
+                let updated_pair = linear_map(gate_matrix, &pair);
+
+                *self.amplitudes.get_mut(index_low) = *updated_pair.get(0);
+                *self.amplitudes.get_mut(index_high) = *updated_pair.get(1);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Applies a single-qubit gate to all amplitude pairs associated with `target`.
+    #[cfg_attr(feature = "bench", visibility::make(pub))]
+    #[cfg_attr(feature = "trace", tracing::instrument(skip(self, gate_matrix), name = "1 Qubit Gate Strided", err))]
+    fn apply_1q_strided(&mut self, target: usize, gate_matrix: &SquareMatrix) -> Result<(), &'static str> {
+        let num_q = self.n;
+
+        if target >= num_q {
+            return Err("Target qubit does not exist");
+        }
+
+        let stride = 1 << (num_q - target - 1);
+
+        for offset in (0..self.amplitudes.len()).step_by(2 * stride) {
+            for index_low in offset..(offset + stride) {
+                // Pair amplitudes whose bitstrings differ only at the target qubit.
+                let index_high = index_low + stride;
+
+                let pair = Vector::from_elements([
+                    *self.amplitudes.get(index_low),
+                    *self.amplitudes.get(index_high)
+                ]);
+
+                // Apply the gate to the subspace.
+                let updated_pair = linear_map(gate_matrix, &pair);
 
                 *self.amplitudes.get_mut(index_low) = *updated_pair.get(0);
                 *self.amplitudes.get_mut(index_high) = *updated_pair.get(1);
@@ -142,9 +176,10 @@ impl State {
 
     /// Applies a controlled two-qubit gate to amplitude pairs associated with `target`,
     /// where the operation is applied only when `control` is in the `|1⟩` state.
+    #[deprecated]
     #[cfg_attr(feature = "bench", visibility::make(pub))]
-    #[cfg_attr(feature = "trace", tracing::instrument(skip(self, gate_matrix), name = "2 Qubit Gate", err))]
-    fn apply_c2q(&mut self, control: usize, target: usize, gate_matrix: SquareMatrix) -> Result<(), &'static str> {
+    #[cfg_attr(feature = "trace", tracing::instrument(skip(self, gate_matrix), name = "2 Qubit Gate Indexed", err))]
+    fn apply_c2q(&mut self, control: usize, target: usize, gate_matrix: &SquareMatrix) -> Result<(), &'static str> {
         if control == target {
             return Err("Control and target must be distinct qubits");
         }
@@ -169,6 +204,80 @@ impl State {
 
                 *self.amplitudes.get_mut(index_low) = *updated_pair.get(0);
                 *self.amplitudes.get_mut(index_high) = *updated_pair.get(1);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Applies a controlled two-qubit gate to amplitude pairs associated with `target`,
+    /// where the operation is applied only when `control` is in the `|1⟩` state.
+    #[cfg_attr(feature = "bench", visibility::make(pub))]
+    #[cfg_attr(feature = "trace", tracing::instrument(skip(self, gate_matrix), name = "2 Qubit Gate Strided", err))]
+    fn apply_c2q_strided(&mut self, control: usize, target: usize, gate_matrix: &SquareMatrix) -> Result<(), &'static str> {
+        let num_q = self.n;
+        let num_amps = self.amplitudes.len();
+
+        if control >= num_q || target >= num_q {
+            return Err("Control and target must be existing qubits");
+        }
+
+        if control == target {
+            return Err("Control and target must be distinct qubits");
+        }
+
+        let c_stride = 1 << (num_q - control - 1);
+        let t_stride = 1 << (num_q - target - 1);
+
+        if control > target {
+            // Target is more significant, so select T=0 blocks before C=1 blocks.
+            for t_block in (0..num_amps).step_by(2 * t_stride) {
+                let t_is_zero = t_block..(t_block + t_stride);
+
+                for c_block in t_is_zero.step_by(2 * c_stride) {
+                    let c_is_one = (c_block + c_stride)..(c_block + 2 * c_stride);
+
+                    for index_low in c_is_one {
+                        // Pair amplitudes whose bitstrings differ only at the target qubit.
+                        let index_high = index_low + t_stride;
+
+                        let pair = Vector::from_elements([
+                            *self.amplitudes.get(index_low),
+                            *self.amplitudes.get(index_high)
+                        ]);
+
+                        // Apply the gate to the subspace.
+                        let updated_pair = linear_map(gate_matrix, &pair);
+
+                        *self.amplitudes.get_mut(index_low) = *updated_pair.get(0);
+                        *self.amplitudes.get_mut(index_high) = *updated_pair.get(1);
+                    }
+                }
+            }
+        } else {
+            // Control is more significant, so select C=1 blocks before T=0 blocks.
+            for c_block in (c_stride..num_amps).step_by(2 * c_stride) {
+                let c_is_one = c_block..(c_block + c_stride);
+
+                for t_block in c_is_one.step_by(2 * t_stride) {
+                    let t_is_zero = t_block..(t_block + t_stride);
+
+                    for index_low in t_is_zero {
+                        // Pair amplitudes whose bitstrings differ only at the target qubit.
+                        let index_high = index_low + t_stride;
+
+                        let pair = Vector::from_elements([
+                            *self.amplitudes.get(index_low),
+                            *self.amplitudes.get(index_high)
+                        ]);
+
+                        // Apply the gate to the subspace.
+                        let updated_pair = linear_map(gate_matrix, &pair);
+
+                        *self.amplitudes.get_mut(index_low) = *updated_pair.get(0);
+                        *self.amplitudes.get_mut(index_high) = *updated_pair.get(1);
+                    }
+                }
             }
         }
 
@@ -255,6 +364,24 @@ mod test {
     use crate::legacy::math_utils::C64;
 
     use super::*;
+
+    #[test]
+    fn strided_x() {
+        let mut state = State::zero(2).unwrap();
+        state.apply_1q_strided(0, &matrix::h()).unwrap();
+        
+        let amps = state.amplitudes();
+        let expected = Vector::from_elements([
+            C64(FRAC_1_SQRT_2, 0.0),
+            C64(0.0, 0.0),
+            C64(FRAC_1_SQRT_2, 0.0),
+            C64(0.0, 0.0),
+        ]);
+
+        for i in 0..expected.len() {
+            assert_eq!(amps[i], *expected.get(i));
+        }
+    }
 
     #[test]
     fn amplitudes_len_is_circuit_size_to_power_of_two() {
