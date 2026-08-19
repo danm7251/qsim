@@ -1,7 +1,7 @@
 #[cfg(feature = "trace")]
 mod trace;
 
-use qsim::legacy::{gates::Gate, LegacyState};
+use qsim::{api::Instruction, state::State};
 
 const DEBUG: bool = false;
 
@@ -9,40 +9,26 @@ fn main() {
     #[cfg(feature = "trace")]
     let _guard = trace::init_tracing();
 
-    // Example usage
-    let num_qubits = 13;
-    let mut state = LegacyState::zero(num_qubits).unwrap();
-    show_state(&state);
-    show_norm(&state);
-    state.apply_gate(Gate::H {target: 0}).unwrap();
-    show_state(&state);
-    show_norm(&state);
-    state.apply_gate(Gate::CNOT { control: 0, target: 5 }).unwrap();
-    show_state(&state);
-    show_norm(&state);
-    show_measure(&mut state, 0);
-    show_state(&state);
-    show_norm(&state);
-    show_measure(&mut state, 1);
-    show_state(&state);
-    show_norm(&state);
-    show_measure(&mut state, 2);
-    show_state(&state);
-    show_norm(&state);
+    let num_q = 12;
+    let mut state = State::zero(num_q).unwrap();
+    state.execute(Instruction::X { q: 2 }).unwrap();
 }
 
-fn show_norm(state: &LegacyState) {
+#[allow(unused)]
+fn show_norm(state: &State) {
     if DEBUG { println!("L2 Norm: {:.2}", state.norm()) }
 }
 
-fn show_measure(state: &mut LegacyState, target: usize) {
+#[allow(unused)]
+fn show_measure(state: &mut State, target: usize) {
     if DEBUG {
-        let result = if state.measure(target) { 1 } else { 0 };
+        let result = if state.measure(target).unwrap() { 1 } else { 0 };
         println!("Q{} = {}", target, result)
     }
 }
 
-fn show_state(state: &LegacyState) {
+#[allow(unused)]
+fn show_state(state: &State) {
     if DEBUG {
         for (i, amp) in state.amplitudes().iter().enumerate() {
             println!("Amplitude {} = {}", i, amp)
