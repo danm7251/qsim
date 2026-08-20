@@ -20,10 +20,65 @@ use common::{construct_qft_for_current, construct_qft_for_legacy};
 // Active benchmarks.
 criterion_group!(
     benches,
-    bench_legacy_vs_current_state_with_qft
+    bench_probability_dists,
+    bench_measure_operations
 );
 
 criterion_main!(benches);
+
+// OPERATION COMPARISONS
+
+/// Compares the legacy implementation of obtaining the marginal probability
+/// of a qubit to the new implementation.
+#[allow(deprecated, unused)]
+fn bench_probability_dists(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Probabilities, Legacy vs New");
+    let n = 14;
+
+    for target in 0..n {
+        let state = black_box(State::zero(n).unwrap());
+        group.bench_with_input(
+            BenchmarkId::new("Legacy", target),
+            &target,
+            |b, target| b.iter(|| black_box(state.legacy_probabilities(*target)))
+        );
+
+        let state = black_box(State::zero(n).unwrap());
+        group.bench_with_input(
+            BenchmarkId::new("New", target),
+            &target,
+            |b, target| b.iter(|| black_box(state.probabilities(*target)))
+        );
+    }
+
+    group.finish();
+}
+
+/// Compares the legacy implementation of the `measure` operation
+/// to the new implementation.
+#[allow(deprecated, unused)]
+fn bench_measure_operations(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Measurement, Legacy vs New");
+    let n = 14;
+
+    for target in 0..n {
+        let mut state = black_box(State::zero(n).unwrap());
+        group.bench_with_input(
+            BenchmarkId::new("Legacy", target),
+            &target,
+            |b, target| b.iter(|| black_box(state.legacy_measure(*target)))
+        );
+
+        let mut state = black_box(State::zero(n).unwrap());
+        group.bench_with_input(
+            BenchmarkId::new("New", target),
+            &target,
+            |b, target| b.iter(|| black_box(state.measure(*target)))
+        );
+    }
+
+    group.finish();
+}
 
 // KERNEL COMPARISONS
 

@@ -131,6 +131,86 @@ fn benchmarks() -> Vec<BenchGroup> {
         }
     );
 
+    // LEGACY VS CURRENT MARGINAL PROBABILITY DISTRIBUTION
+
+    let n = 14;
+
+    let mut cases = Vec::<BenchCase>::new();
+    for target in 0..n {
+        cases.push({
+            let state = black_box(State::zero(n).unwrap());
+
+            BenchCase {
+                name: format!("current-target-{target}"),
+                bench: Box::new(move || {
+                    let res = black_box(state.probabilities(target).unwrap());
+                    black_box(res);
+                }),
+            }
+        });
+
+        cases.push({
+            let state = black_box(State::zero(n).unwrap());
+
+            #[allow(deprecated)]
+            BenchCase {
+                name: format!("legacy-target-{target}"),
+                bench: Box::new(move || {
+                    let res = black_box(state.legacy_probabilities(target).unwrap());
+                    black_box(res);
+                }),
+            }
+        });
+    }
+
+    benches.push(
+        BenchGroup {
+            name: "Probability Distribution Performance",
+            active: true,
+            cases,
+        }
+    );
+
+    // LEGACY VS CURRENT MEASUREMENT
+
+    let n = 14;
+
+    let mut cases = Vec::<BenchCase>::new();
+    for target in 0..n {
+        cases.push({
+            let mut state = black_box(State::zero(n).unwrap());
+
+            BenchCase {
+                name: format!("current-target-{target}"),
+                bench: Box::new(move || {
+                    let res = black_box(state.measure(target).unwrap());
+                    black_box(res);
+                }),
+            }
+        });
+
+        cases.push({
+            let mut state = black_box(State::zero(n).unwrap());
+
+            #[allow(deprecated)]
+            BenchCase {
+                name: format!("legacy-target-{target}"),
+                bench: Box::new(move || {
+                    let res = black_box(state.legacy_measure(target).unwrap());
+                    black_box(res);
+                }),
+            }
+        });
+    }
+
+    benches.push(
+        BenchGroup {
+            name: "Measurement Performance",
+            active: true,
+            cases,
+        }
+    );
+
     benches
 }
 

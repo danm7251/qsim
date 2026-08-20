@@ -63,7 +63,8 @@ impl State {
     ///
     /// The returned tuple contains the probabilities of measuring the qubit as
     /// `|0⟩` and `|1⟩`, respectively.
-    pub fn probabilities(&self, target: usize) -> Result<(f64, f64), &'static str> {
+    #[deprecated]
+    pub fn legacy_probabilities(&self, target: usize) -> Result<(f64, f64), &'static str> {
         if target >= self.num_qubits() {
             return Err("Target qubit does not exist");
         }
@@ -74,6 +75,31 @@ impl State {
             .filter(|(index, _)| index_is_zero(self.n, target, *index))
             .map(|(_, amplitude)| amplitude.norm_sqr())
             .sum();
+
+        let prob_1 = 1.0 - prob_0;
+
+        Ok((prob_0, prob_1))
+    }
+
+    /// Returns the marginal probability distribution of the target qubit.
+    ///
+    /// The returned tuple contains the probabilities of measuring the qubit as
+    /// `|0⟩` and `|1⟩`, respectively.
+    pub fn probabilities(&self, target: usize) -> Result<(f64, f64), &'static str> {
+        let num_q = self.num_qubits();
+
+        if target >= num_q {
+            return Err("Target qubit does not exist");
+        }
+
+        let stride = 1 << (num_q - target - 1);
+        let mut prob_0 = 0.0;
+
+        for offset in (0..self.amplitudes.len()).step_by(2 * stride) {
+            for i in offset..(offset + stride) {
+                prob_0 += self.amplitudes.get(i).norm_sqr();
+            }
+        }
 
         let prob_1 = 1.0 - prob_0;
 
@@ -224,7 +250,8 @@ impl State {
     /// the resulting measurement outcome.
     /// 
     /// Returns `true` if qubit is `|1⟩`.
-    pub fn measure(&mut self, target: usize) -> Result<bool, &'static str> {
+    #[deprecated]
+    pub fn legacy_measure(&mut self, target: usize) -> Result<bool, &'static str> {
         let num_qubits = self.n;
 
         if target >= num_qubits {
@@ -268,6 +295,52 @@ impl State {
                     *amplitude /= prob_1.sqrt();
                 } else {
                     *amplitude = Complex64::ZERO;
+                }
+            }
+        }
+
+        Ok(outcome_is_one)
+    }
+
+    /// Measures `target` in the computational basis and collapses the state to
+    /// the resulting measurement outcome.
+    /// 
+    /// Returns `true` if qubit is `|1⟩`.
+    pub fn measure(&mut self, target: usize) -> Result<bool, &'static str> {
+        let num_qubits = self.n;
+
+        if target >= num_qubits {
+            return Err("Target qubit does not exist");
+        }
+
+        let (prob_0, prob_1) = self.probabilities(target)?;
+
+        // Sample measurement outcome.
+        let outcome_is_one = random::<f64>() > prob_0;
+
+        #[cfg(feature = "trace")]
+        tracing::debug!(
+            "Measurement: target={}, P(0)={}, P(1)={}, outcome={}",
+            target,
+            prob_0,
+            prob_1,
+            outcome_is_one as u8,
+        );
+
+        let stride = 1 << (num_qubits - target - 1);
+
+        // Collapse and renormalise the state.
+        for offset in (0..self.amplitudes.len()).step_by(2 * stride) {
+            for index_low in offset..(offset + stride) {
+                let index_high = index_low + stride;
+
+                // Renormalise amplitudes matching the measurement outcome and zero the rest.
+                if outcome_is_one {
+                    *self.amplitudes.get_mut(index_low) = Complex64::ZERO;
+                    *self.amplitudes.get_mut(index_high) /= prob_1.sqrt();
+                } else {
+                    *self.amplitudes.get_mut(index_low) /= prob_0.sqrt();
+                    *self.amplitudes.get_mut(index_high) = Complex64::ZERO;
                 }
             }
         }
