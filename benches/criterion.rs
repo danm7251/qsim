@@ -10,7 +10,7 @@ use rand::{rng, RngExt};
 
 use qsim::{
     legacy::{LegacyState, gates::Gate},
-    linalg::{SquareMatrix, Vector, linear_map},
+    linalg::{SquareMatrix, Vector, linear_map, matrix},
     state::State,
 };
 
@@ -20,7 +20,7 @@ use common::{construct_qft_for_current, construct_qft_for_legacy};
 // Active benchmarks.
 criterion_group!(
     benches,
-    bench_legacy_vs_current_state_with_qft
+    bench_1q_par_vs_ser_kernel
 );
 
 criterion_main!(benches);
@@ -79,6 +79,53 @@ fn bench_1q_index_kernel_over_target(c: &mut Criterion) {
 
     group.finish();
 }
+
+// PARALLEL VS SERIAL KERNEL
+#[allow(unused)]
+fn bench_1q_par_vs_ser_kernel(c: &mut Criterion) {
+    for n in (9..21).step_by(2) {
+        let mut group = c.benchmark_group(
+            format!("1Q Parallel vs Serial Kernel/n={n}")
+        );
+
+        group.measurement_time(Duration::from_secs(60));
+
+        for target in (0..n).step_by(1) {
+
+            // Info
+            println!("\n\nTarget: {target}");
+            println!("Number of blocks: {}", 1 << target);
+            println!("Rayon pool size: {}\n", rayon::current_num_threads());
+
+            // Prep Benchmark
+            let gate = matrix::h();
+            let mut state = black_box(State::zero(n).unwrap());
+
+            // Warm up kernel incase any rayon machinery needs setting up.
+            state.apply_1q(n / 2, &gate).unwrap();
+
+            group.bench_with_input(
+                BenchmarkId::new("Serial", target),
+                &target,
+                |b, target| {
+                    b.iter(|| black_box(state.apply_1q(*target, &gate)))
+            });
+
+            let mut state = black_box(State::zero(n).unwrap());
+            state.par_apply_1q(n / 2, &gate).unwrap();
+
+            group.bench_with_input(
+                BenchmarkId::new("Parallel", target),
+                &target,
+                |b, target| {
+                    b.iter(|| black_box(state.par_apply_1q(*target, &gate)))
+            });
+        }
+
+        group.finish();
+    }
+}
+
 
 // QSIM LINEAR ALGEBRA VS NDARRAY
 

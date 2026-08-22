@@ -8,6 +8,7 @@ chrono = { version = "0.4.45", optional = true }
 ndarray = "0.17.2"
 num-complex = "0.4.6"
 rand = "0.10.1"
+rayon = "1.12.0"
 tracing = { version = "0.1.44", optional = true }
 tracing-chrome = { version = "0.7.2", optional = true }
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"], optional = true }

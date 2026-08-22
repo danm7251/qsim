@@ -10,7 +10,7 @@ use num_complex::Complex;
 use qsim::{
     api::Instruction,
     legacy::{LegacyState, gates::Gate},
-    linalg::{SquareMatrix, Vector, linear_map},
+    linalg::{SquareMatrix, Vector, linear_map, matrix},
     state::State,
 };
 
@@ -90,6 +90,26 @@ fn benchmarks() -> Vec<BenchGroup> {
                             let res = ndarray_matrix.dot(&ndarray_vector);
                             black_box(res);
                         }),
+                    }
+                },
+            ],
+        },
+        BenchGroup {
+            name: "",
+            active: true,
+            cases: vec![
+                {
+                    let n = 2;
+                    let matrix = matrix::h();
+                    let mut state = black_box(State::zero(n).unwrap());
+                    state.par_apply_1q(n / 2, &matrix).unwrap();
+
+                    BenchCase {
+                        name: "parallel".into(),
+                        bench: Box::new(move || {
+                            let res = black_box(state.par_apply_1q(0, &matrix).unwrap());
+                            black_box(res);
+                        })
                     }
                 },
             ],

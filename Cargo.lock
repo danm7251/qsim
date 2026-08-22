@@ -714,6 +714,7 @@ dependencies = [
  "ndarray",
  "num-complex",
  "rand",
+ "rayon",
  "tracing",
  "tracing-chrome",
  "tracing-subscriber",

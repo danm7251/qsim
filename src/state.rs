@@ -1,5 +1,6 @@
 use num_complex::Complex64;
 use rand::random;
+use rayon::prelude::*;
 
 use crate::{
     api::Instruction::{self, *},
@@ -117,7 +118,7 @@ impl State {
 
     /// Applies a single-qubit gate to all amplitude pairs associated with `target`.
     #[cfg_attr(feature = "bench", visibility::make(pub))]
-    #[cfg_attr(feature = "trace", tracing::instrument(skip(self, gate_matrix), name = "1 Qubit Gate Strided", err))]
+    #[cfg_attr(feature = "trace", tracing::instrument(skip(self, gate_matrix), name = "1 Qubit Gate Serial", err))]
     fn apply_1q(&mut self, target: usize, gate_matrix: &SquareMatrix) -> Result<(), &'static str> {
         let num_q = self.n;
 
@@ -144,6 +145,43 @@ impl State {
                 *self.amplitudes.get_mut(index_high) = *updated_pair.get(1);
             }
         }
+
+        Ok(())
+    }
+
+    /// Applies a single-qubit gate to all amplitude pairs associated with `target`.
+    #[cfg_attr(feature = "bench", visibility::make(pub))]
+    #[cfg_attr(feature = "trace", tracing::instrument(skip(self, gate_matrix), name = "1 Qubit Gate Parallel", err))]
+    fn par_apply_1q(&mut self, target: usize, gate_matrix: &SquareMatrix) -> Result<(), &'static str> {
+        let num_q = self.n;
+
+        if target >= num_q {
+            return Err("Target qubit does not exist");
+        }
+
+        // Break the statevector into distinct mutable blocks, with no overlapping pairs.
+        let stride = 1 << (num_q - target - 1);
+        let blocks = self.amplitudes
+            .as_mut_slice()
+            .par_chunks_exact_mut(2 * stride);
+
+        blocks.for_each(|block| {
+            for index_low in 0..stride {
+                // Pair amplitudes whose bitstrings differ only at the target qubit.
+                let index_high = index_low + stride;
+
+                let pair = Vector::from_elements([
+                    block[index_low],
+                    block[index_high]
+                ]);
+
+                // Apply the gate to the subspace.
+                let updated_pair = linear_map(gate_matrix, &pair);
+
+                block[index_low] = *updated_pair.get(0);
+                block[index_high] = *updated_pair.get(1);
+            }
+        });
 
         Ok(())
     }
