@@ -6,6 +6,18 @@
     )
 )
 
+#let submission = false
+
+#let note(body) = if submission {
+  panic("Submission build contains working notes!")
+} else {
+  block(
+    fill: luma(85%),
+    inset: 8pt,
+    body,
+  )
+}
+
 #set page(
     paper: "a4",
     margin: 2.5cm,
