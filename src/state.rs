@@ -6,13 +6,20 @@ use crate::{
     linalg::{linear_map, matrix, SquareMatrix, Vector}
 };
 
+#[derive(Debug)]
+pub struct Config {
+    avx: bool,
+    fma: bool,
+}
+
 /// A quantum state represented by a statevector.
 ///
 /// Amplitudes use big-endian qubit ordering, with qubit 0 corresponding
 /// to the most significant bit of the amplitude index.
 pub struct State {
     amplitudes: Vector,
-    n: usize
+    n: usize,
+    _config: Config,
 }
 
 impl State {
@@ -22,19 +29,59 @@ impl State {
     ///
     /// # Errors
     ///
-    /// Returns an error if `circuit_size` is `0`.
+    /// Returns an error if `num_qubits` is `0`.
     #[cfg_attr(feature = "trace", tracing::instrument(name = "Zero State Construction", err))]
     pub fn zero(num_qubits: usize) -> Result<Self, &'static str> {
+        // Validation.
         if num_qubits == 0 {
             return Err("A state with 0 qubits is invalid");
         }
 
+        // Amplitudes setup.
+        let mut amplitudes = Vector::zeros(1 << num_qubits);
+        *amplitudes.get_mut(0) = Complex64::ONE;
+
+        // Auto Config setup.
+        let config = Config {
+            avx: is_x86_feature_detected!("avx"),
+            fma: is_x86_feature_detected!("fma"),
+        };
+
+        Ok(Self {
+            amplitudes,
+            n: num_qubits,
+            _config: config,
+        })
+    }
+
+    /// Creates the `|0...0⟩` state for `num_qubits` qubits.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - `num_qubits` is `0`.
+    /// - host CPU does not support `config` values.
+    #[cfg_attr(feature = "trace", tracing::instrument(name = "Zero State Construction", err))]
+    pub fn zero_with_config(num_qubits: usize, config: Config) -> Result<Self, &'static str> {
+        // Validation.
+        if num_qubits == 0 {
+            return Err("A state with 0 qubits is invalid");
+        }
+        if config.avx && !is_x86_feature_detected!("avx") {
+            return Err("Host CPU does not support AVX");
+        }
+        if config.fma && !is_x86_feature_detected!("fma") {
+            return Err("Host CPU does not support FMA");
+        }
+
+        // Amplitudes setup.
         let mut amplitudes = Vector::zeros(1 << num_qubits);
         *amplitudes.get_mut(0) = Complex64::ONE;
 
         Ok(Self {
             amplitudes,
-            n: num_qubits
+            n: num_qubits,
+            _config: config,
         })
     }
 
