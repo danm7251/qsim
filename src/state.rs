@@ -183,6 +183,7 @@ impl State {
         // Dispatch to the configured kernel.
         match (self.config.avx, self.config.fma) {
             (false, false) => kernels::generic::apply_1q(self.amplitudes.as_mut_slice(), stride, matrix),
+            (false, true) => kernels::fma::apply_1q(self.amplitudes.as_mut_slice(), stride, matrix),
             _ => unimplemented!("AVX and FMA are unimplemented!"),
         }
 
@@ -214,6 +215,7 @@ impl State {
 
         match (self.config.avx, self.config.fma) {
             (false, false) => kernels::generic::apply_c2q(self.amplitudes.as_mut_slice(), c_stride, t_stride, matrix),
+            (false, true) => kernels::fma::apply_c2q(self.amplitudes.as_mut_slice(), c_stride, t_stride, matrix),
             _ => unimplemented!("AVX and FMA are unimplemented!"),
         }
 

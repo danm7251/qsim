@@ -71,19 +71,31 @@ pub fn apply_c2q(amps: &mut[Complex64], c_stride: usize, t_stride: usize, matrix
 /// # Panics
 ///
 /// Panics if either amplitude index is outside `amps`.
-fn apply_pair(amps: &mut [Complex64], index_low: usize, t_stride: usize, matrix: &SquareMatrix) {
+fn apply_pair(amps: &mut[Complex64], index_low: usize, t_stride: usize, matrix: &SquareMatrix) {
     let index_high = index_low + t_stride;
+    let input = [amps[index_low], amps[index_high]];
+    let mut output = [Complex64::ZERO; 2];
 
-    let pair = Vector::from_elements([
-        amps[index_low],
-        amps[index_high],
-    ]);
+    for i in 0..2 {
+        let mut total = Complex64::ZERO;
 
-    let updated = linear_map(matrix, &pair);
+        for j in 0..2 {
+            let coefficient = *matrix.get(i, j);
+            let value = input[j];
 
-    amps[index_low] = *updated.get(0);
-    amps[index_high] = *updated.get(1);
+            total = Complex64::new(
+                coefficient.re * value.re + (-coefficient.im * value.im + total.re),
+                coefficient.re * value.im + (coefficient.im * value.re + total.im),
+            );
+        }
+
+        output[i] = total;
+    }
+
+    amps[index_low] = output[0];
+    amps[index_high] = output[1];
 }
+
 
 #[cfg(test)]
 mod tests {

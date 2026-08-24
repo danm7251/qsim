@@ -10,8 +10,8 @@ use rand::{rng, RngExt};
 
 use qsim::{
     legacy::{LegacyState, gates::Gate},
-    linalg::{SquareMatrix, Vector, linear_map},
-    state::State,
+    linalg::{SquareMatrix, Vector, linear_map, matrix},
+    state::{Config, State},
 };
 
 mod common;
@@ -20,12 +20,48 @@ use common::{construct_qft_for_current, construct_qft_for_legacy};
 // Active benchmarks.
 criterion_group!(
     benches,
-    bench_legacy_vs_current_state_with_qft
+    bench_1q_fma_kernel
 );
 
 criterion_main!(benches);
 
 // KERNEL COMPARISONS
+
+fn bench_1q_fma_kernel(c: &mut Criterion) {
+    let mut group = c.benchmark_group("1Q FMA vs Generic (Direct) / Target");
+    group.measurement_time(Duration::from_secs(2));
+
+    let n = 14;
+    let targets = (5..n).step_by(2);
+
+    for t in targets {
+        let matrix = matrix::h();
+
+        let config = Config {
+            avx: false,
+            fma: true,
+        };
+
+        let mut state = State::zero_with_config(n, config).unwrap();
+        group.bench_with_input(BenchmarkId::new("FMA", t), &t, |b, t| {
+            b.iter(|| state.apply_1q(*t, &matrix))
+        });
+
+        let matrix = matrix::h();
+
+        let config = Config {
+            avx: false,
+            fma: false,
+        };
+
+        let mut state = State::zero_with_config(n, config).unwrap();
+        group.bench_with_input(BenchmarkId::new("Generic", t), &t, |b, t| {
+            b.iter(|| state.apply_1q(*t, &matrix))
+        });
+    }
+
+    group.finish();
+}
 
 /// Compares the index and Kronecker-product implementations of a
 /// single-qubit gate across different target qubits.
