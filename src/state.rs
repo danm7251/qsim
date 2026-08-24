@@ -2,14 +2,13 @@ use num_complex::Complex64;
 use rand::random;
 
 use crate::{
-    api::Instruction::{self, *},
-    linalg::{linear_map, matrix, SquareMatrix, Vector}
+    api::Instruction::{self, *}, kernels, linalg::{matrix, SquareMatrix, Vector}
 };
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Config {
-    avx: bool,
-    fma: bool,
+    pub avx: bool,
+    pub fma: bool,
 }
 
 /// A quantum state represented by a statevector.
@@ -19,7 +18,7 @@ pub struct Config {
 pub struct State {
     amplitudes: Vector,
     n: usize,
-    _config: Config,
+    config: Config,
 }
 
 impl State {
@@ -50,7 +49,7 @@ impl State {
         Ok(Self {
             amplitudes,
             n: num_qubits,
-            _config: config,
+            config: config,
         })
     }
 
@@ -81,7 +80,7 @@ impl State {
         Ok(Self {
             amplitudes,
             n: num_qubits,
-            _config: config,
+            config: config,
         })
     }
 
@@ -162,108 +161,60 @@ impl State {
 
     // Gate kernels
 
-    /// Applies a single-qubit gate to all amplitude pairs associated with `target`.
+    /// Applies a single-qubit `matrix` to `target`.
+    ///
+    /// Selects the configured kernel after validating the target and calculating
+    /// its state-vector stride.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `target` does not identify an existing qubit.
     #[cfg_attr(feature = "bench", visibility::make(pub))]
-    #[cfg_attr(feature = "trace", tracing::instrument(skip(self, gate_matrix), name = "1 Qubit Gate Strided", err))]
-    fn apply_1q(&mut self, target: usize, gate_matrix: &SquareMatrix) -> Result<(), &'static str> {
+    fn apply_1q(&mut self, target: usize, matrix: &SquareMatrix) -> Result<(), &'static str> {
         let num_q = self.n;
 
         if target >= num_q {
             return Err("Target qubit does not exist");
         }
 
+        // Convert the target qubit into its state-vector stride.
         let stride = 1 << (num_q - target - 1);
 
-        for offset in (0..self.amplitudes.len()).step_by(2 * stride) {
-            for index_low in offset..(offset + stride) {
-                // Pair amplitudes whose bitstrings differ only at the target qubit.
-                let index_high = index_low + stride;
-
-                let pair = Vector::from_elements([
-                    *self.amplitudes.get(index_low),
-                    *self.amplitudes.get(index_high)
-                ]);
-
-                // Apply the gate to the subspace.
-                let updated_pair = linear_map(gate_matrix, &pair);
-
-                *self.amplitudes.get_mut(index_low) = *updated_pair.get(0);
-                *self.amplitudes.get_mut(index_high) = *updated_pair.get(1);
-            }
+        // Dispatch to the configured kernel.
+        match (self.config.avx, self.config.fma) {
+            (false, false) => kernels::generic::apply_1q(self.amplitudes.as_mut_slice(), stride, matrix),
+            _ => unimplemented!("AVX and FMA are unimplemented!"),
         }
 
         Ok(())
     }
 
-    /// Applies a controlled two-qubit gate to amplitude pairs associated with `target`,
-    /// where the operation is applied only when `control` is in the `|1⟩` state.
+    /// Applies a controlled single-qubit `matrix` to `target`.
+    ///
+    /// The operation is applied only to amplitudes where `control` is `|1⟩`.
+    /// After validation, both qubits are converted into state-vector strides and
+    /// passed to the configured kernel.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if either qubit does not exist or if `control` and `target`
+    /// identify the same qubit.
     #[cfg_attr(feature = "bench", visibility::make(pub))]
-    #[cfg_attr(feature = "trace", tracing::instrument(skip(self, gate_matrix), name = "2 Qubit Gate Strided", err))]
-    fn apply_c2q(&mut self, control: usize, target: usize, gate_matrix: &SquareMatrix) -> Result<(), &'static str> {
-        let num_q = self.n;
-        let num_amps = self.amplitudes.len();
-
-        if control >= num_q || target >= num_q {
+    fn apply_c2q(&mut self, control: usize, target: usize, matrix: &SquareMatrix) -> Result<(), &'static str> {
+        if control >= self.n || target >= self.n {
             return Err("Control and target must be existing qubits");
         }
-
         if control == target {
             return Err("Control and target must be distinct qubits");
         }
 
-        let c_stride = 1 << (num_q - control - 1);
-        let t_stride = 1 << (num_q - target - 1);
+        // Convert the control and target qubits into state-vector strides
+        let c_stride = 1 << (self.n - control - 1);
+        let t_stride = 1 << (self.n - target - 1);
 
-        if control > target {
-            // Target is more significant, so select T=0 blocks before C=1 blocks.
-            for t_block in (0..num_amps).step_by(2 * t_stride) {
-                let t_is_zero = t_block..(t_block + t_stride);
-
-                for c_block in t_is_zero.step_by(2 * c_stride) {
-                    let c_is_one = (c_block + c_stride)..(c_block + 2 * c_stride);
-
-                    for index_low in c_is_one {
-                        // Pair amplitudes whose bitstrings differ only at the target qubit.
-                        let index_high = index_low + t_stride;
-
-                        let pair = Vector::from_elements([
-                            *self.amplitudes.get(index_low),
-                            *self.amplitudes.get(index_high)
-                        ]);
-
-                        // Apply the gate to the subspace.
-                        let updated_pair = linear_map(gate_matrix, &pair);
-
-                        *self.amplitudes.get_mut(index_low) = *updated_pair.get(0);
-                        *self.amplitudes.get_mut(index_high) = *updated_pair.get(1);
-                    }
-                }
-            }
-        } else {
-            // Control is more significant, so select C=1 blocks before T=0 blocks.
-            for c_block in (c_stride..num_amps).step_by(2 * c_stride) {
-                let c_is_one = c_block..(c_block + c_stride);
-
-                for t_block in c_is_one.step_by(2 * t_stride) {
-                    let t_is_zero = t_block..(t_block + t_stride);
-
-                    for index_low in t_is_zero {
-                        // Pair amplitudes whose bitstrings differ only at the target qubit.
-                        let index_high = index_low + t_stride;
-
-                        let pair = Vector::from_elements([
-                            *self.amplitudes.get(index_low),
-                            *self.amplitudes.get(index_high)
-                        ]);
-
-                        // Apply the gate to the subspace.
-                        let updated_pair = linear_map(gate_matrix, &pair);
-
-                        *self.amplitudes.get_mut(index_low) = *updated_pair.get(0);
-                        *self.amplitudes.get_mut(index_high) = *updated_pair.get(1);
-                    }
-                }
-            }
+        match (self.config.avx, self.config.fma) {
+            (false, false) => kernels::generic::apply_c2q(self.amplitudes.as_mut_slice(), c_stride, t_stride, matrix),
+            _ => unimplemented!("AVX and FMA are unimplemented!"),
         }
 
         Ok(())
@@ -276,9 +227,7 @@ impl State {
     /// 
     /// Returns `true` if qubit is `|1⟩`.
     pub fn measure(&mut self, target: usize) -> Result<bool, &'static str> {
-        let num_qubits = self.n;
-
-        if target >= num_qubits {
+        if target >= self.n {
             return Err("Target qubit does not exist");
         }
 
@@ -296,7 +245,7 @@ impl State {
             outcome_is_one as u8,
         );
 
-        let stride = 1 << (num_qubits - target - 1);
+        let stride = 1 << (self.n - target - 1);
 
         // Collapse and renormalise the state.
         for offset in (0..self.amplitudes.len()).step_by(2 * stride) {
