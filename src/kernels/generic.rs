@@ -5,7 +5,7 @@
 
 use num_complex::Complex64;
 
-use crate::linalg::{linear_map, SquareMatrix, Vector};
+use crate::linalg::SquareMatrix;
 
 /// Applies `matrix` to every amplitude pair separated by `t_stride`.
 ///

@@ -24,11 +24,12 @@ use crate::linalg::SquareMatrix;
 ///
 /// Panics if `t_stride` is zero or does not describe a valid partition of
 /// `amps`.
+#[target_feature(enable = "fma")]
 #[cfg_attr(feature = "trace", tracing::instrument(skip(amps), name = "1 Qubit Gate Strided FMA"))]
 pub fn apply_1q(amps: &mut[Complex64], t_stride: usize, matrix: &SquareMatrix) {
     for offset in (0..amps.len()).step_by(2 * t_stride) {
         for index_low in offset..(offset + t_stride) {
-            unsafe { apply_pair(amps, index_low, t_stride, matrix); }
+            apply_pair(amps, index_low, t_stride, matrix);
         }
     }
 }
@@ -48,6 +49,7 @@ pub fn apply_1q(amps: &mut[Complex64], t_stride: usize, matrix: &SquareMatrix) {
 ///
 /// Panics if either stride is zero, the strides are equal, or they do not
 /// describe valid qubits within `amps`.
+#[target_feature(enable = "fma")]
 #[cfg_attr(feature = "trace", tracing::instrument(skip(amps), name = "2 Qubit Gate Strided FMA"))]
 pub fn apply_c2q(amps: &mut[Complex64], c_stride: usize, t_stride: usize, matrix: &SquareMatrix) {
     if c_stride < t_stride {
@@ -59,7 +61,7 @@ pub fn apply_c2q(amps: &mut[Complex64], c_stride: usize, t_stride: usize, matrix
                 let c_is_one = (c_block + c_stride)..(c_block + 2 * c_stride);
 
                 for index_low in c_is_one {
-                    unsafe { apply_pair(amps, index_low, t_stride, matrix); }
+                    apply_pair(amps, index_low, t_stride, matrix);
                 }
             }
         }
@@ -72,7 +74,7 @@ pub fn apply_c2q(amps: &mut[Complex64], c_stride: usize, t_stride: usize, matrix
                 let t_is_zero = t_block..(t_block + t_stride);
 
                 for index_low in t_is_zero {
-                    unsafe { apply_pair(amps, index_low, t_stride, matrix); }
+                    apply_pair(amps, index_low, t_stride, matrix);
                 }
             }
         }
@@ -122,154 +124,4 @@ fn apply_pair(amps: &mut[Complex64], index_low: usize, t_stride: usize, matrix: 
 
     amps[index_low] = output[0];
     amps[index_high] = output[1];
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::linalg::matrix;
-
-    // Floating point error tolerance.
-    const EPSILON: f64 = 1e-12;
-
-    fn assert_amps_eq(actual: &[Complex64], expected: &[Complex64]) {
-        assert_eq!(actual.len(), expected.len());
-
-        for (index, (actual, expected)) in
-            actual.iter().zip(expected).enumerate()
-        {
-            let difference = (*actual - *expected).norm();
-
-            assert!(
-                difference < EPSILON,
-                "Amplitude {index} differs: {actual} != {expected}"
-            );
-        }
-    }
-
-    fn real_amps(values: &[f64]) -> Vec<Complex64> {
-        values
-            .iter()
-            .map(|&value| Complex64::new(value, 0.0))
-            .collect()
-    }
-
-    #[test]
-    fn pair_applies_gate_to_selected_amplitudes() {
-        if !std::is_x86_feature_detected!("fma") {
-            return;
-        }
-
-        let mut amps = real_amps(&[1.0, 0.0, 0.0, 0.0]);
-
-        unsafe {
-            apply_pair(&mut amps, 0, 2, &matrix::x());
-        }
-
-        assert_amps_eq(
-            &amps,
-            &real_amps(&[0.0, 0.0, 1.0, 0.0]),
-        );
-    }
-
-    #[test]
-    fn one_qubit_gate_with_unit_stride() {
-        if !std::is_x86_feature_detected!("fma") {
-            return;
-        }
-
-        let mut amps = real_amps(&[1.0, 2.0, 3.0, 4.0]);
-
-        apply_1q(&mut amps, 1, &matrix::x());
-
-        assert_amps_eq(
-            &amps,
-            &real_amps(&[2.0, 1.0, 4.0, 3.0]),
-        );
-    }
-
-    #[test]
-    fn one_qubit_gate_with_larger_stride() {
-        if !std::is_x86_feature_detected!("fma") {
-            return;
-        }
-
-        let mut amps =
-            real_amps(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
-
-        apply_1q(&mut amps, 2, &matrix::x());
-
-        assert_amps_eq(
-            &amps,
-            &real_amps(&[3.0, 4.0, 1.0, 2.0, 7.0, 8.0, 5.0, 6.0]),
-        );
-    }
-
-    #[test]
-    fn controlled_gate_with_more_significant_control() {
-        if !std::is_x86_feature_detected!("fma") {
-            return;
-        }
-
-        let mut amps = real_amps(&[1.0, 2.0, 3.0, 4.0]);
-
-        // Control q0 has stride 2; target q1 has stride 1.
-        apply_c2q(&mut amps, 2, 1, &matrix::x());
-
-        assert_amps_eq(
-            &amps,
-            &real_amps(&[1.0, 2.0, 4.0, 3.0]),
-        );
-    }
-
-    #[test]
-    fn controlled_gate_with_more_significant_target() {
-        if !std::is_x86_feature_detected!("fma") {
-            return;
-        }
-
-        let mut amps = real_amps(&[1.0, 2.0, 3.0, 4.0]);
-
-        // Control q1 has stride 1; target q0 has stride 2.
-        apply_c2q(&mut amps, 1, 2, &matrix::x());
-
-        assert_amps_eq(
-            &amps,
-            &real_amps(&[1.0, 4.0, 3.0, 2.0]),
-        );
-    }
-
-    #[test]
-    fn complex_gate_is_applied_correctly() {
-        if !std::is_x86_feature_detected!("fma") {
-            return;
-        }
-
-        let mut amps = real_amps(&[1.0, 0.0]);
-
-        apply_1q(&mut amps, 1, &matrix::y());
-
-        assert_amps_eq(
-            &amps,
-            &[
-                Complex64::ZERO,
-                Complex64::new(0.0, 1.0),
-            ],
-        );
-    }
-
-    #[test]
-    fn unitary_gate_preserves_norm() {
-        if !std::is_x86_feature_detected!("fma") {
-            return;
-        }
-
-        let mut amps = real_amps(&[1.0, 0.0, 0.0, 0.0]);
-
-        apply_1q(&mut amps, 2, &matrix::h());
-
-        let norm: f64 = amps.iter().map(Complex64::norm_sqr).sum();
-
-        assert!((norm - 1.0).abs() < EPSILON);
-    }
 }

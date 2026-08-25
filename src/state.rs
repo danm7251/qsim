@@ -5,10 +5,17 @@ use crate::{
     api::Instruction::{self, *}, kernels, linalg::{matrix, SquareMatrix, Vector}
 };
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum FmaMode {
+    Disabled,
+    PairOnly,
+    FullKernel,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct Config {
     pub avx: bool,
-    pub fma: bool,
+    pub fma: FmaMode,
 }
 
 /// A quantum state represented by a statevector.
@@ -42,8 +49,8 @@ impl State {
 
         // Auto Config setup.
         let config = Config {
-            avx: is_x86_feature_detected!("avx"),
-            fma: is_x86_feature_detected!("fma"),
+            avx: false, //is_x86_feature_detected!("avx"),
+            fma: FmaMode::Disabled,
         };
 
         Ok(Self {
@@ -69,7 +76,7 @@ impl State {
         if config.avx && !is_x86_feature_detected!("avx") {
             return Err("Host CPU does not support AVX");
         }
-        if config.fma && !is_x86_feature_detected!("fma") {
+        if (config.fma != FmaMode::Disabled) && !is_x86_feature_detected!("fma") {
             return Err("Host CPU does not support FMA");
         }
 
@@ -182,8 +189,9 @@ impl State {
 
         // Dispatch to the configured kernel.
         match (self.config.avx, self.config.fma) {
-            (false, false) => kernels::generic::apply_1q(self.amplitudes.as_mut_slice(), stride, matrix),
-            (false, true) => kernels::fma::apply_1q(self.amplitudes.as_mut_slice(), stride, matrix),
+            (false, FmaMode::Disabled) => kernels::generic::apply_1q(self.amplitudes.as_mut_slice(), stride, matrix),
+            (false, FmaMode::PairOnly) => kernels::fma::apply_1q(self.amplitudes.as_mut_slice(), stride, matrix),
+            (false, FmaMode::FullKernel) => unsafe { kernels::fma_full::apply_1q(self.amplitudes.as_mut_slice(), stride, matrix) },
             _ => unimplemented!("AVX and FMA are unimplemented!"),
         }
 
@@ -214,8 +222,9 @@ impl State {
         let t_stride = 1 << (self.n - target - 1);
 
         match (self.config.avx, self.config.fma) {
-            (false, false) => kernels::generic::apply_c2q(self.amplitudes.as_mut_slice(), c_stride, t_stride, matrix),
-            (false, true) => kernels::fma::apply_c2q(self.amplitudes.as_mut_slice(), c_stride, t_stride, matrix),
+            (false, FmaMode::Disabled) => kernels::generic::apply_c2q(self.amplitudes.as_mut_slice(), c_stride, t_stride, matrix),
+            (false, FmaMode::PairOnly) => kernels::fma::apply_c2q(self.amplitudes.as_mut_slice(), c_stride, t_stride, matrix),
+            (false, FmaMode::FullKernel) => unsafe { kernels::fma_full::apply_c2q(self.amplitudes.as_mut_slice(), c_stride, t_stride, matrix) },
             _ => unimplemented!("AVX and FMA are unimplemented!"),
         }
 

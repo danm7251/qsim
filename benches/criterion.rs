@@ -20,43 +20,121 @@ use common::{construct_qft_for_current, construct_qft_for_legacy};
 // Active benchmarks.
 criterion_group!(
     benches,
-    bench_1q_fma_kernel
+    bench_1q_fma_kernel_over_target,
+    bench_1q_fma_kernel_over_n
 );
 
 criterion_main!(benches);
 
 // KERNEL COMPARISONS
 
-fn bench_1q_fma_kernel(c: &mut Criterion) {
-    let mut group = c.benchmark_group("1Q FMA vs Generic (Direct) / Target");
+fn bench_1q_fma_kernel_over_target(c: &mut Criterion) {
+    let mut group = c.benchmark_group("1Q FMA Variants over Target");
     group.measurement_time(Duration::from_secs(2));
 
     let n = 14;
     let targets = (5..n).step_by(2);
 
     for t in targets {
+        // FMA Disabled
         let matrix = matrix::h();
 
         let config = Config {
             avx: false,
-            fma: true,
+            fma: qsim::state::FmaMode::Disabled,
         };
 
         let mut state = State::zero_with_config(n, config).unwrap();
-        group.bench_with_input(BenchmarkId::new("FMA", t), &t, |b, t| {
+        group.bench_with_input(BenchmarkId::new("Disabled FMA", t), &t, |b, t| {
             b.iter(|| state.apply_1q(*t, &matrix))
         });
 
+        // Partial FMA
         let matrix = matrix::h();
 
         let config = Config {
             avx: false,
-            fma: false,
+            fma: qsim::state::FmaMode::PairOnly,
         };
 
         let mut state = State::zero_with_config(n, config).unwrap();
-        group.bench_with_input(BenchmarkId::new("Generic", t), &t, |b, t| {
+        group.bench_with_input(BenchmarkId::new("Partial FMA", t), &t, |b, t| {
             b.iter(|| state.apply_1q(*t, &matrix))
+        });
+
+
+        // Full FMA
+        let matrix = matrix::h();
+
+        let config = Config {
+            avx: false,
+            fma: qsim::state::FmaMode::FullKernel,
+        };
+
+        let mut state = State::zero_with_config(n, config).unwrap();
+        group.bench_with_input(BenchmarkId::new("Full FMA", t), &t, |b, t| {
+            b.iter(|| state.apply_1q(*t, &matrix))
+        });
+    }
+
+    group.finish();
+}
+
+fn bench_1q_fma_kernel_over_n(c: &mut Criterion) {
+      let ns = [4, 10, 14, 18];
+
+      fma_over_n(c, &ns, "first", |_| 0);
+      fma_over_n(c, &ns, "middle", |n| n / 2);
+      fma_over_n(c, &ns, "last", |n| n - 1);
+}
+
+fn fma_over_n(c: &mut Criterion, ns: &[usize], position: &str, target_for: fn(usize) -> usize) {
+    let mut group = c.benchmark_group(
+        format!("1Q FMA Variants over N at {position} target")
+    );
+    group.measurement_time(Duration::from_secs(2));
+
+    for &n in ns {
+        let t = target_for(n);
+
+        // FMA Disabled
+        let matrix = matrix::h();
+
+        let config = Config {
+            avx: false,
+            fma: qsim::state::FmaMode::Disabled,
+        };
+
+        let mut state = State::zero_with_config(n, config).unwrap();
+        group.bench_with_input(BenchmarkId::new("Disabled FMA", n), &n, |b, _| {
+            b.iter(|| state.apply_1q(t, &matrix))
+        });
+
+        // Partial FMA
+        let matrix = matrix::h();
+
+        let config = Config {
+            avx: false,
+            fma: qsim::state::FmaMode::PairOnly,
+        };
+
+        let mut state = State::zero_with_config(n, config).unwrap();
+        group.bench_with_input(BenchmarkId::new("Partial FMA", n), &n, |b, _| {
+            b.iter(|| state.apply_1q(t, &matrix))
+        });
+
+
+        // Full FMA
+        let matrix = matrix::h();
+
+        let config = Config {
+            avx: false,
+            fma: qsim::state::FmaMode::FullKernel,
+        };
+
+        let mut state = State::zero_with_config(n, config).unwrap();
+        group.bench_with_input(BenchmarkId::new("Full FMA", n), &n, |b, _| {
+            b.iter(|| state.apply_1q(t, &matrix))
         });
     }
 
