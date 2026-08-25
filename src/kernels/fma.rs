@@ -24,11 +24,12 @@ use crate::linalg::SquareMatrix;
 ///
 /// Panics if `t_stride` is zero or does not describe a valid partition of
 /// `amps`.
+#[target_feature(enable = "fma")]
 #[cfg_attr(feature = "trace", tracing::instrument(skip(amps), name = "1 Qubit Gate Strided FMA"))]
 pub fn apply_1q(amps: &mut[Complex64], t_stride: usize, matrix: &SquareMatrix) {
     for offset in (0..amps.len()).step_by(2 * t_stride) {
         for index_low in offset..(offset + t_stride) {
-            unsafe { apply_pair(amps, index_low, t_stride, matrix); }
+            apply_pair(amps, index_low, t_stride, matrix);
         }
     }
 }
@@ -48,6 +49,7 @@ pub fn apply_1q(amps: &mut[Complex64], t_stride: usize, matrix: &SquareMatrix) {
 ///
 /// Panics if either stride is zero, the strides are equal, or they do not
 /// describe valid qubits within `amps`.
+#[target_feature(enable = "fma")]
 #[cfg_attr(feature = "trace", tracing::instrument(skip(amps), name = "2 Qubit Gate Strided FMA"))]
 pub fn apply_c2q(amps: &mut[Complex64], c_stride: usize, t_stride: usize, matrix: &SquareMatrix) {
     if c_stride < t_stride {
@@ -59,7 +61,7 @@ pub fn apply_c2q(amps: &mut[Complex64], c_stride: usize, t_stride: usize, matrix
                 let c_is_one = (c_block + c_stride)..(c_block + 2 * c_stride);
 
                 for index_low in c_is_one {
-                    unsafe { apply_pair(amps, index_low, t_stride, matrix); }
+                    apply_pair(amps, index_low, t_stride, matrix);
                 }
             }
         }
@@ -72,7 +74,7 @@ pub fn apply_c2q(amps: &mut[Complex64], c_stride: usize, t_stride: usize, matrix
                 let t_is_zero = t_block..(t_block + t_stride);
 
                 for index_low in t_is_zero {
-                    unsafe { apply_pair(amps, index_low, t_stride, matrix); }
+                    apply_pair(amps, index_low, t_stride, matrix);
                 }
             }
         }
@@ -180,7 +182,9 @@ mod tests {
 
         let mut amps = real_amps(&[1.0, 2.0, 3.0, 4.0]);
 
-        apply_1q(&mut amps, 1, &matrix::x());
+        unsafe {
+            apply_1q(&mut amps, 1, &matrix::x());
+        }
 
         assert_amps_eq(
             &amps,
@@ -196,8 +200,10 @@ mod tests {
 
         let mut amps =
             real_amps(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
-
-        apply_1q(&mut amps, 2, &matrix::x());
+        
+        unsafe {
+            apply_1q(&mut amps, 2, &matrix::x());
+        }
 
         assert_amps_eq(
             &amps,
@@ -214,7 +220,9 @@ mod tests {
         let mut amps = real_amps(&[1.0, 2.0, 3.0, 4.0]);
 
         // Control q0 has stride 2; target q1 has stride 1.
-        apply_c2q(&mut amps, 2, 1, &matrix::x());
+        unsafe {
+            apply_c2q(&mut amps, 2, 1, &matrix::x());
+        }
 
         assert_amps_eq(
             &amps,
@@ -231,7 +239,9 @@ mod tests {
         let mut amps = real_amps(&[1.0, 2.0, 3.0, 4.0]);
 
         // Control q1 has stride 1; target q0 has stride 2.
-        apply_c2q(&mut amps, 1, 2, &matrix::x());
+        unsafe {
+            apply_c2q(&mut amps, 1, 2, &matrix::x());
+        }
 
         assert_amps_eq(
             &amps,
@@ -247,7 +257,9 @@ mod tests {
 
         let mut amps = real_amps(&[1.0, 0.0]);
 
-        apply_1q(&mut amps, 1, &matrix::y());
+        unsafe {
+            apply_1q(&mut amps, 1, &matrix::y());
+        }
 
         assert_amps_eq(
             &amps,
@@ -266,7 +278,9 @@ mod tests {
 
         let mut amps = real_amps(&[1.0, 0.0, 0.0, 0.0]);
 
-        apply_1q(&mut amps, 2, &matrix::h());
+        unsafe {
+            apply_1q(&mut amps, 2, &matrix::h());
+        }
 
         let norm: f64 = amps.iter().map(Complex64::norm_sqr).sum();
 
