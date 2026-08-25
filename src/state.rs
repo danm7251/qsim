@@ -179,11 +179,19 @@ impl State {
 
         // Convert the target qubit into its state-vector stride.
         let stride = 1 << (num_q - target - 1);
+        
+        let config = self.config;
+        let amplitudes = self.amplitudes.as_mut_slice();
 
         // Dispatch to the configured kernel.
-        match (self.config.avx, self.config.fma) {
-            (false, false) => kernels::generic::apply_1q(self.amplitudes.as_mut_slice(), stride, matrix),
-            (false, true) => unsafe { kernels::fma::apply_1q(self.amplitudes.as_mut_slice(), stride, matrix) },
+        match (config.avx, config.fma) {
+            (false, false) => kernels::generic::apply_1q(amplitudes, stride, matrix),
+            (false, true) => unsafe { kernels::fma::apply_1q(amplitudes, stride, matrix) },
+            (true, false) => if stride > 1 {
+                unsafe { kernels::avx::apply_1q(amplitudes, stride, matrix) }
+            } else {
+                kernels::generic::apply_1q(amplitudes, stride, matrix);
+            },
             _ => unimplemented!("AVX and FMA are unimplemented!"),
         }
 
@@ -213,9 +221,12 @@ impl State {
         let c_stride = 1 << (self.n - control - 1);
         let t_stride = 1 << (self.n - target - 1);
 
-        match (self.config.avx, self.config.fma) {
-            (false, false) => kernels::generic::apply_c2q(self.amplitudes.as_mut_slice(), c_stride, t_stride, matrix),
-            (false, true) => unsafe { kernels::fma::apply_c2q(self.amplitudes.as_mut_slice(), c_stride, t_stride, matrix) },
+        let config = self.config;
+        let amplitudes = self.amplitudes.as_mut_slice();
+
+        match (config.avx, config.fma) {
+            (false, false) => kernels::generic::apply_c2q(amplitudes, c_stride, t_stride, matrix),
+            (false, true) => unsafe { kernels::fma::apply_c2q(amplitudes, c_stride, t_stride, matrix) },
             _ => unimplemented!("AVX and FMA are unimplemented!"),
         }
 

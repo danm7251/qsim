@@ -15,7 +15,7 @@ use crate::linalg::SquareMatrix;
 ///
 /// Panics if `t_stride` is zero or does not describe a valid partition of
 /// `amps`.
-#[cfg_attr(feature = "trace", tracing::instrument(skip(amps), name = "1 Qubit Gate Strided"))]
+#[cfg_attr(feature = "trace", tracing::instrument(skip(amps), name = "1 Qubit Gate"))]
 pub fn apply_1q(amps: &mut[Complex64], t_stride: usize, matrix: &SquareMatrix) -> () {
     for offset in (0..amps.len()).step_by(2 * t_stride) {
         for index_low in offset..(offset + t_stride) {
@@ -33,7 +33,7 @@ pub fn apply_1q(amps: &mut[Complex64], t_stride: usize, matrix: &SquareMatrix) -
 ///
 /// Panics if either stride is zero, the strides are equal, or they do not
 /// describe valid qubits within `amps`.
-#[cfg_attr(feature = "trace", tracing::instrument(skip(amps), name = "2 Qubit Gate Strided"))]
+#[cfg_attr(feature = "trace", tracing::instrument(skip(amps), name = "2 Qubit Gate"))]
 pub fn apply_c2q(amps: &mut[Complex64], c_stride: usize, t_stride: usize, matrix: &SquareMatrix) -> () {
     if c_stride < t_stride {
         // Target is more significant, so select T=0 blocks before C=1 blocks.

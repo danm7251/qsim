@@ -9,9 +9,10 @@ use num_complex::Complex;
 use rand::{rng, RngExt};
 
 use qsim::{
+    kernels::{AvxVariant, apply_1q_avx_with_variant, apply_1q_generic},
     legacy::{LegacyState, gates::Gate},
-    linalg::{SquareMatrix, Vector, linear_map},
-    state::State,
+    linalg::{SquareMatrix, Vector, linear_map, matrix},
+    state::State
 };
 
 mod common;
@@ -20,12 +21,137 @@ use common::{construct_qft_for_current, construct_qft_for_legacy};
 // Active benchmarks.
 criterion_group!(
     benches,
-    bench_legacy_vs_current_state_with_qft
+    bench_generic_vs_avx_over_targets,
+    bench_generic_vs_avx_over_n
 );
 
 criterion_main!(benches);
 
 // KERNEL COMPARISONS
+
+fn zero_amplitudes(n: usize) -> Vec<Complex<f64>> {
+    let mut amplitudes =
+        vec![Complex::new(0.0, 0.0); 1 << n];
+
+    amplitudes[0] = Complex::new(1.0, 0.0);
+    amplitudes
+}
+
+/// Compares the generic kernel and AVX variants across target qubits.
+fn bench_generic_vs_avx_over_targets(c: &mut Criterion) {
+    let mut group = c.benchmark_group("1Q Kernel Variants by Target");
+    group.measurement_time(Duration::from_secs(10));
+
+    let n = 16;
+    let gate = matrix::y();
+
+    // The final target has stride 1, which the SIMD kernel cannot process.
+    let targets = [
+        0,
+        n / 2,
+        n - 2,
+    ];
+
+    for target in targets {
+        let stride = 1 << (n - target - 1);
+        let mut amplitudes = zero_amplitudes(n);
+
+        group.bench_with_input(
+            BenchmarkId::new("generic", target),
+            &target,
+            |b, _| {
+                b.iter(|| {
+                    apply_1q_generic(
+                        black_box(&mut amplitudes),
+                        black_box(stride),
+                        black_box(&gate),
+                    );
+                });
+            },
+        );
+
+        let variants = [
+            ("avx-scalar", AvxVariant::Scalar),
+            ("avx-portable", AvxVariant::Portable),
+        ];
+
+        for (name, variant) in variants {
+            let mut amplitudes = zero_amplitudes(n);
+
+            group.bench_with_input(
+                BenchmarkId::new(name, target),
+                &target,
+                |b, _| {
+                    b.iter(|| unsafe {
+                        apply_1q_avx_with_variant(
+                            black_box(&mut amplitudes),
+                            black_box(stride),
+                            black_box(&gate),
+                            variant,
+                        );
+                    });
+                },
+            );
+        }
+    }
+
+    group.finish();
+}
+
+/// Compares the generic kernel and AVX variants across state-vector sizes.
+fn bench_generic_vs_avx_over_n(c: &mut Criterion) {
+    let mut group = c.benchmark_group("1Q Kernel Variants by Qubits");
+    group.measurement_time(Duration::from_secs(10));
+
+    let qubit_counts = [4, 8, 12, 16, 20];
+    let target = 0;
+    let gate = matrix::y();
+
+    for n in qubit_counts {
+        let stride = 1 << (n - target - 1);
+        let mut amplitudes = zero_amplitudes(n);
+
+        group.bench_with_input(
+            BenchmarkId::new("generic", n),
+            &n,
+            |b, _| {
+                b.iter(|| {
+                    apply_1q_generic(
+                        black_box(&mut amplitudes),
+                        black_box(stride),
+                        black_box(&gate),
+                    );
+                });
+            },
+        );
+
+        let variants = [
+            ("avx-scalar", AvxVariant::Scalar),
+            ("avx-portable", AvxVariant::Portable),
+        ];
+
+        for (name, variant) in variants {
+            let mut amplitudes = zero_amplitudes(n);
+
+            group.bench_with_input(
+                BenchmarkId::new(name, n),
+                &n,
+                |b, _| {
+                    b.iter(|| unsafe {
+                        apply_1q_avx_with_variant(
+                            black_box(&mut amplitudes),
+                            black_box(stride),
+                            black_box(&gate),
+                            variant,
+                        );
+                    });
+                },
+            );
+        }
+    }
+
+    group.finish();
+}
 
 /// Compares the index and Kronecker-product implementations of a
 /// single-qubit gate across different target qubits.
