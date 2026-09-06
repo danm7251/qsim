@@ -11,7 +11,7 @@ use qsim::{
     api::Instruction,
     legacy::{LegacyState, gates::Gate},
     linalg::{SquareMatrix, Vector, linear_map},
-    state::State,
+    statevector::StateVector,
 };
 
 mod common;

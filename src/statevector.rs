@@ -10,12 +10,12 @@ use crate::{
 ///
 /// Amplitudes use big-endian qubit ordering, with qubit 0 corresponding
 /// to the most significant bit of the amplitude index.
-pub struct State {
+pub struct StateVector {
     amplitudes: Vector,
     n: usize
 }
 
-impl State {
+impl StateVector {
     // Constructors
 
     /// Creates the `|0...0⟩` state for `num_qubits` qubits.
@@ -374,7 +374,7 @@ mod test {
 
     #[test]
     fn strided_x() {
-        let mut state = State::zero(2).unwrap();
+        let mut state = StateVector::zero(2).unwrap();
         state.apply_1q(0, &matrix::h()).unwrap();
         
         let amps = state.amplitudes();
@@ -392,14 +392,14 @@ mod test {
 
     #[test]
     fn amplitudes_len_is_circuit_size_to_power_of_two() {
-        assert_eq!(State::zero(1).unwrap().amplitudes().len(), 2);
-        assert_eq!(State::zero(3).unwrap().amplitudes().len(), 8);
-        assert_eq!(State::zero(8).unwrap().amplitudes().len(), 256);
+        assert_eq!(StateVector::zero(1).unwrap().amplitudes().len(), 2);
+        assert_eq!(StateVector::zero(3).unwrap().amplitudes().len(), 8);
+        assert_eq!(StateVector::zero(8).unwrap().amplitudes().len(), 256);
     }
 
     #[test]
     fn zero_state_is_normalised() {
-        let state = State::zero(4).unwrap();
+        let state = StateVector::zero(4).unwrap();
         let total: f64 = state.amplitudes().iter().map(|a| a.norm_sqr()).sum();
         // Exact equalities will hold for a zero state.
         assert_eq!(total, 1.0);
@@ -407,7 +407,7 @@ mod test {
 
     #[test]
     fn h_creates_superposition() {
-        let mut state = State::zero(1).unwrap();
+        let mut state = StateVector::zero(1).unwrap();
         state.execute(H { q: 0 }).expect("Failed to apply Gate::H");
         let amps = state.amplitudes();
         let expected = C64(FRAC_1_SQRT_2, 0.);
@@ -490,7 +490,7 @@ mod test {
         ];
 
         for case in cases {
-            let mut state = State::zero(case.circuit_size).unwrap();
+            let mut state = StateVector::zero(case.circuit_size).unwrap();
             for g in case.instructions {
                 state.execute(g).expect("Failed to apply Gate");
             }
@@ -541,7 +541,7 @@ mod test {
         ];
 
         for case in cases {
-            let mut state = State::zero(case.circuit_size).unwrap();
+            let mut state = StateVector::zero(case.circuit_size).unwrap();
             for g in case.instructions {
                 state.execute(g).expect("Failed to apply Gate");
             }

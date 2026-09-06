@@ -2,7 +2,7 @@
 #[path ="../src/trace.rs"]
 mod trace;
 
-use qsim::{api::Instruction, state::State};
+use qsim::{api::Instruction, statevector::StateVector};
 use rand::random;
 
 /// An implementation of Deutsch's algorithm.
@@ -32,7 +32,7 @@ fn main() {
 
 fn deutsch_algorithm(f: &Vec<Instruction>) -> bool {
     // Setup initial state
-    let mut state = State::zero(2).unwrap();
+    let mut state = StateVector::zero(2).unwrap();
     state.execute(Instruction::X { q: 1 }).expect("Failed to apply Instruction::X to target=1");
     state.execute(Instruction::H { q: 0 }).expect("Failed to apply Instruction::H to target=0");
     state.execute(Instruction::H { q: 1 }).expect("Failed to apply Instruction::H to target=1");

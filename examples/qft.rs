@@ -4,7 +4,7 @@ use std::f64::consts::PI;
 #[path ="../src/trace.rs"]
 mod trace;
 
-use qsim::{api::Instruction, state::State};
+use qsim::{api::Instruction, statevector::StateVector};
 
 
 /// AN implementation of the 3-qubit Quantum Fourier Transform (QFT).
@@ -19,7 +19,7 @@ fn main() {
     let n: usize = 10;
 
     // Create a |010> state.
-    let mut state = State::zero(n).unwrap();
+    let mut state = StateVector::zero(n).unwrap();
     state.execute(Instruction::X { q: 1 }).unwrap();
 
     // Apply QFT circuit.
