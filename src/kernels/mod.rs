@@ -11,7 +11,7 @@ pub use avx::{
 
 // Allows benchmarking the generic kernel directly.
 #[cfg(feature = "bench")]
-pub use generic::apply_1q as apply_1q_generic;
+pub use generic::apply_1q_strided as apply_1q_generic;
 
 #[cfg(test)]
 mod tests {
@@ -46,7 +46,7 @@ mod tests {
         let mut expected = input;
         let mut actual = input;
 
-        generic::apply_1q(&mut expected, 2, &matrix);
+        generic::apply_1q_strided(&mut expected, 2, &matrix);
 
         unsafe {
             avx::apply_1q(&mut actual, 2, &matrix);
