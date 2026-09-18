@@ -185,12 +185,12 @@ impl State {
 
         // Dispatch to the configured kernel.
         match (config.avx, config.fma) {
-            (false, false) => kernels::generic::apply_1q_strided(amplitudes, stride, matrix),
+            (false, false) => kernels::portable::apply_1q_strided(amplitudes, stride, matrix),
             (false, true) => unsafe { kernels::fma::apply_1q(amplitudes, stride, matrix) },
             (true, false) => if stride > 1 {
                 unsafe { kernels::avx::apply_1q(amplitudes, stride, matrix) }
             } else {
-                kernels::generic::apply_1q_strided(amplitudes, stride, matrix);
+                kernels::portable::apply_1q_strided(amplitudes, stride, matrix);
             },
             _ => unimplemented!("AVX and FMA are unimplemented!"),
         }
@@ -225,7 +225,7 @@ impl State {
         let amplitudes = self.amplitudes.as_mut_slice();
 
         match (config.avx, config.fma) {
-            (false, false) => kernels::generic::apply_c2q_strided(amplitudes, c_stride, t_stride, matrix),
+            (false, false) => kernels::portable::apply_c2q_strided(amplitudes, c_stride, t_stride, matrix),
             (false, true) => unsafe { kernels::fma::apply_c2q(amplitudes, c_stride, t_stride, matrix) },
             _ => unimplemented!("AVX and FMA are unimplemented!"),
         }

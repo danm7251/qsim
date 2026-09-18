@@ -1,6 +1,6 @@
 pub(crate) mod avx;
 pub(crate) mod fma;
-pub(crate) mod generic;
+pub(crate) mod portable;
 
 // Allows benchmarking experimental AVX kernels.
 #[cfg(feature = "bench")]
@@ -11,7 +11,7 @@ pub use avx::{
 
 // Allows benchmarking the generic kernel directly.
 #[cfg(feature = "bench")]
-pub use generic::apply_1q_strided as apply_1q_generic;
+pub use portable::apply_1q_strided as apply_1q_generic;
 
 #[cfg(test)]
 mod tests {
@@ -19,7 +19,7 @@ mod tests {
 
     use crate::linalg::SquareMatrix;
 
-    use super::{avx, generic};
+    use super::{avx, portable};
 
     #[test]
     fn portable_avx_matches_generic() {
@@ -46,7 +46,7 @@ mod tests {
         let mut expected = input;
         let mut actual = input;
 
-        generic::apply_1q_strided(&mut expected, 2, &matrix);
+        portable::apply_1q_strided(&mut expected, 2, &matrix);
 
         unsafe {
             avx::apply_1q(&mut actual, 2, &matrix);
