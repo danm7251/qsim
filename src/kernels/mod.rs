@@ -11,7 +11,8 @@ pub use avx::{
 
 // Allows benchmarking the generic kernel directly.
 #[cfg(feature = "bench")]
-pub use portable::apply_1q_strided as apply_1q_generic;
+#[allow(deprecated)]
+pub use portable::{apply_1q_strided, apply_1q_kronecker, apply_c2q_strided, apply_c2q_kronecker};
 
 #[cfg(test)]
 mod tests {

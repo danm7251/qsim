@@ -7,15 +7,17 @@ use dhat::Profiler;
 use ndarray::{Array1, Array2};
 use num_complex::Complex;
 
+#[allow(deprecated)]
 use qsim::{
     api::Instruction,
+    kernels::{apply_1q_kronecker, apply_1q_strided, apply_c2q_kronecker, apply_c2q_strided},
     legacy::{LegacyState, gates::Gate},
-    linalg::{SquareMatrix, Vector, linear_map},
-    state::State,
+    linalg::{SquareMatrix, Vector, linear_map, matrix},
+    state::State
 };
 
 mod common;
-use common::{construct_qft_for_current, construct_qft_for_legacy};
+use common::{target_to_stride, zero_amplitudes, construct_qft_for_current, construct_qft_for_legacy};
 
 #[global_allocator]
 static ALLOC: dhat::Alloc = dhat::Alloc;
@@ -97,6 +99,105 @@ fn benchmarks() -> Vec<BenchGroup> {
     ];
 
     // Parameterised benchmark groups.
+
+    let circuit_sizes = (3..14).step_by(2);
+
+    let mut cases = Vec::<BenchCase>::new();
+    for n in circuit_sizes {
+        let stride = target_to_stride(n, n / 2);
+
+        cases.push({
+            let mut amplitudes = zero_amplitudes(n);
+            let matrix = matrix::h();
+
+            #[allow(deprecated)]
+            BenchCase {
+                name: format!("Kronecker-expansion-hadamard-{n}"),
+                bench: Box::new(move || {
+                    apply_1q_kronecker(
+                        black_box(&mut amplitudes),
+                        black_box(stride),
+                        black_box(&matrix)
+                    );
+                })
+            }
+        });
+
+        cases.push({
+            let mut amplitudes = zero_amplitudes(n);
+            let matrix = matrix::h();
+
+            BenchCase {
+                name: format!("Direct-indexing-hadamard-{n}"),
+                bench: Box::new(move || {
+                    apply_1q_strided(
+                        black_box(&mut amplitudes),
+                        black_box(stride),
+                        black_box(&matrix)
+                    );
+                })
+            }
+        });
+    }
+
+    benches.push(
+        BenchGroup {
+            name: "Hadamard Gate Performance: Kronecker Expansion and Direct Indexing",
+            active: true,
+            cases,
+        }
+    );
+
+    let circuit_sizes = (3..14).step_by(2);
+
+    let mut cases = Vec::<BenchCase>::new();
+    for n in circuit_sizes {
+        let c_stride = target_to_stride(n, 0);
+        let t_stride = target_to_stride(n, n / 2);
+
+        cases.push({
+            let mut amplitudes = zero_amplitudes(n);
+            let matrix = matrix::h();
+
+            #[allow(deprecated)]
+            BenchCase {
+                name: format!("Kronecker-expansion-cnot-{n}"),
+                bench: Box::new(move || {
+                    apply_c2q_kronecker(
+                        black_box(&mut amplitudes),
+                        black_box(c_stride),
+                        black_box(t_stride),
+                        black_box(&matrix)
+                    );
+                })
+            }
+        });
+
+        cases.push({
+            let mut amplitudes = zero_amplitudes(n);
+            let matrix = matrix::h();
+
+            BenchCase {
+                name: format!("Direct-indexing-cnot-{n}"),
+                bench: Box::new(move || {
+                    apply_c2q_strided(
+                        black_box(&mut amplitudes),
+                        black_box(c_stride),
+                        black_box(t_stride),
+                        black_box(&matrix)
+                    );
+                })
+            }
+        });
+    }
+
+    benches.push(
+        BenchGroup {
+            name: "CNOT(CX) Gate Performance: Kronecker Expansion and Direct Indexing",
+            active: true,
+            cases,
+        }
+    );
 
     // LEGACY VS CURRENT STATEVECTOR QFT PERFORMANCE
 

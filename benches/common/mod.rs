@@ -1,6 +1,22 @@
 use std::f64::consts::PI;
 
+use num_complex::Complex;
+
 use qsim::{api::Instruction, legacy::gates::Gate};
+
+pub fn target_to_stride(n: usize, t: usize) -> usize {
+    assert!(t < n, "target qubit out of range");
+
+    1 << (n - t - 1)
+}
+
+pub fn zero_amplitudes(n: usize) -> Vec<Complex<f64>> {
+    let mut amplitudes =
+        vec![Complex::new(0.0, 0.0); 1 << n];
+
+    amplitudes[0] = Complex::new(1.0, 0.0);
+    amplitudes
+}
 
 pub fn construct_qft_for_legacy(n: usize) -> Vec<Gate> {
     let mut circuit = Vec::<Gate>::new();

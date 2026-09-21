@@ -3,41 +3,145 @@
 
 use std::{hint::black_box, time::Duration};
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{AxisScale, BenchmarkId, Criterion, PlotConfiguration, criterion_group, criterion_main};
 use ndarray::{array, Array1, Array2};
 use num_complex::Complex;
 use rand::{rng, RngExt};
 
+#[allow(deprecated)]
 use qsim::{
-    kernels::{AvxVariant, apply_1q_avx_with_variant, apply_1q_generic},
+    kernels::{AvxVariant, apply_1q_avx_with_variant, apply_1q_strided, apply_1q_kronecker, apply_c2q_strided, apply_c2q_kronecker},
     legacy::{LegacyState, gates::Gate},
     linalg::{SquareMatrix, Vector, linear_map, matrix},
     state::State
 };
 
 mod common;
-use common::{construct_qft_for_current, construct_qft_for_legacy};
+use common::{target_to_stride, zero_amplitudes, construct_qft_for_current, construct_qft_for_legacy};
 
 // Active benchmarks.
 criterion_group!(
     benches,
-    bench_generic_vs_avx_over_targets,
-    bench_generic_vs_avx_over_n
+    bench_kron_vs_index_on_hadamard_over_qubits,
+    bench_kron_vs_index_on_cnot_over_qubits
 );
 
 criterion_main!(benches);
 
-// KERNEL COMPARISONS
+// MAIN RESULTS
 
-fn zero_amplitudes(n: usize) -> Vec<Complex<f64>> {
-    let mut amplitudes =
-        vec![Complex::new(0.0, 0.0); 1 << n];
+// KRONECKER EXPANSION KERNEL VS STANDARD IN-PLACE KERNEL
 
-    amplitudes[0] = Complex::new(1.0, 0.0);
-    amplitudes
+fn bench_kron_vs_index_on_hadamard_over_qubits(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Hadamard Gate Performance: Kronecker Expansion vs Direct Indexing");
+    let config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    group.plot_config(config);
+
+    let circuit_sizes = (3..14).step_by(2);
+
+    for n in circuit_sizes {
+        let stride = target_to_stride(n, n / 2);
+        let matrix = matrix::h();
+
+        let mut amplitudes = zero_amplitudes(n);
+        #[allow(deprecated)]
+        group.bench_with_input(
+            BenchmarkId::new("Kronecker expansion", n),
+            &n,
+            |b, _| {
+                b.iter(|| {
+                    apply_1q_kronecker(
+                        black_box(&mut amplitudes),
+                        black_box(stride),
+                        black_box(&matrix),
+                    );
+                });
+            },
+        );
+
+        let mut amplitudes = zero_amplitudes(n);
+        group.bench_with_input(
+            BenchmarkId::new("Direct indexing", n),
+            &n,
+            |b, _| {
+                b.iter(|| {
+                    apply_1q_strided(
+                        black_box(&mut amplitudes),
+                        black_box(stride),
+                        black_box(&matrix),
+                    );
+                });
+            },
+        );
+    }
+
+    group.finish();
 }
 
+/// Benchmarks CNOT(CX) application by providing C2Q kernels with an X matrix.
+fn bench_kron_vs_index_on_cnot_over_qubits(c: &mut Criterion) {
+    let mut group = c.benchmark_group("CNOT Gate Performance: Kronecker Expansion vs Direct Indexing");
+    let config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    group.plot_config(config);
+
+    let circuit_sizes = (3..14).step_by(2);
+
+    for n in circuit_sizes {
+        let c_stride = target_to_stride(n, 0);
+        let t_stride = target_to_stride(n, n / 2);
+        let matrix = matrix::x();
+
+        let mut amplitudes = zero_amplitudes(n);
+        #[allow(deprecated)]
+        group.bench_with_input(
+            BenchmarkId::new("Kronecker expansion", n),
+            &n,
+            |b, _| {
+                b.iter(|| {
+                    apply_c2q_kronecker(
+                        black_box(&mut amplitudes),
+                        black_box(c_stride),
+                        black_box(t_stride),
+                        black_box(&matrix),
+                    );
+                });
+            },
+        );
+
+        let mut amplitudes = zero_amplitudes(n);
+        group.bench_with_input(
+            BenchmarkId::new("Direct indexing", n),
+            &n,
+            |b, _| {
+                b.iter(|| {
+                    apply_c2q_strided(
+                        black_box(&mut amplitudes),
+                        black_box(c_stride),
+                        black_box(t_stride),
+                        black_box(&matrix),
+                    );
+                });
+            },
+        );
+    }
+
+    group.finish();
+}
+
+// STANDARD IN-PLACE KERNEL VS FMA ENABLED KERNEL
+
+// STANDARD IN-PLACE KERNEL VS AVX2 ENABLED PORTABLE SIMD KERNEL
+
+// STANDARD IN-PLACE KERNEL VS AVX2+FMA ENABLED PORTABLE SIMD KERNEL
+
+// STANDARD IN-PLACE KERNEL VS PARALLEL KERNEL
+
+// STANDARD IN-PLACE KERNEL VS STABILIZER BACKEND 
+
+// KERNEL COMPARISONS
+
 /// Compares the generic kernel and AVX variants across target qubits.
+#[allow(unused)]
 fn bench_generic_vs_avx_over_targets(c: &mut Criterion) {
     let mut group = c.benchmark_group("1Q Kernel Variants by Target");
     group.measurement_time(Duration::from_secs(10));
@@ -61,7 +165,7 @@ fn bench_generic_vs_avx_over_targets(c: &mut Criterion) {
             &target,
             |b, _| {
                 b.iter(|| {
-                    apply_1q_generic(
+                    apply_1q_strided(
                         black_box(&mut amplitudes),
                         black_box(stride),
                         black_box(&gate),
@@ -99,6 +203,7 @@ fn bench_generic_vs_avx_over_targets(c: &mut Criterion) {
 }
 
 /// Compares the generic kernel and AVX variants across state-vector sizes.
+#[allow(unused)]
 fn bench_generic_vs_avx_over_n(c: &mut Criterion) {
     let mut group = c.benchmark_group("1Q Kernel Variants by Qubits");
     group.measurement_time(Duration::from_secs(10));
@@ -116,7 +221,7 @@ fn bench_generic_vs_avx_over_n(c: &mut Criterion) {
             &n,
             |b, _| {
                 b.iter(|| {
-                    apply_1q_generic(
+                    apply_1q_strided(
                         black_box(&mut amplitudes),
                         black_box(stride),
                         black_box(&gate),
