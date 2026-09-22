@@ -157,7 +157,7 @@ fn benchmarks() -> Vec<BenchGroup> {
 
         cases.push({
             let mut amplitudes = zero_amplitudes(n);
-            let matrix = matrix::h();
+            let matrix = matrix::x();
 
             #[allow(deprecated)]
             BenchCase {
@@ -175,7 +175,7 @@ fn benchmarks() -> Vec<BenchGroup> {
 
         cases.push({
             let mut amplitudes = zero_amplitudes(n);
-            let matrix = matrix::h();
+            let matrix = matrix::x();
 
             BenchCase {
                 name: format!("Direct-indexing-cnot-{n}"),
