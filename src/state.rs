@@ -159,6 +159,18 @@ impl State {
         }
     }
 
+    /// Applies an collection of [`Instruction`]s to the state, updating its amplitudes as required.
+    ///
+    /// Returns an error if an instruction references an invalid qubit or otherwise
+    /// cannot be applied to the state.
+    pub fn execute_all(&mut self, circuit: &[Instruction]) -> Result<(), &'static str> {
+        for &cmd in circuit {
+            self.execute(cmd)?;
+        }
+
+        Ok(())
+    }
+
     // Gate kernels
 
     /// Applies a single-qubit `matrix` to `target`.
