@@ -2,7 +2,7 @@ use num_complex::Complex64;
 use rand::random;
 
 use crate::{
-    api::Instruction::{self, *}, kernels, linalg::{matrix, SquareMatrix, Vector}
+    api::Instruction::{self, *}, error::SimError, kernels, linalg::{SquareMatrix, Vector, matrix}
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -30,10 +30,10 @@ impl State {
     ///
     /// Returns an error if `num_qubits` is `0`.
     #[cfg_attr(feature = "trace", tracing::instrument(name = "Zero State Construction", err))]
-    pub fn zero(num_qubits: usize) -> Result<Self, &'static str> {
+    pub fn zero(num_qubits: usize) -> Result<Self, SimError> {
         // Validation.
         if num_qubits == 0 {
-            return Err("A state with 0 qubits is invalid");
+            return Err(SimError::ZeroQubits);
         }
 
         // Amplitudes setup.
@@ -61,16 +61,16 @@ impl State {
     /// - `num_qubits` is `0`.
     /// - host CPU does not support `config` values.
     #[cfg_attr(feature = "trace", tracing::instrument(name = "Zero State Construction", err))]
-    pub fn zero_with_config(num_qubits: usize, config: Config) -> Result<Self, &'static str> {
+    pub fn zero_with_config(num_qubits: usize, config: Config) -> Result<Self, SimError> {
         // Validation.
         if num_qubits == 0 {
-            return Err("A state with 0 qubits is invalid");
+            return Err(SimError::ZeroQubits);
         }
         if config.avx && !is_x86_feature_detected!("avx") {
-            return Err("Host CPU does not support AVX");
+            return Err(SimError::AvxUnsupported);
         }
         if config.fma && !is_x86_feature_detected!("fma") {
-            return Err("Host CPU does not support FMA");
+            return Err(SimError::FmaUnsupported);
         }
 
         // Amplitudes setup.
@@ -109,11 +109,11 @@ impl State {
     ///
     /// The returned tuple contains the probabilities of measuring the qubit as
     /// `|0⟩` and `|1⟩`, respectively.
-    pub fn probabilities(&self, target: usize) -> Result<(f64, f64), &'static str> {
+    pub fn probabilities(&self, target: usize) -> Result<(f64, f64), SimError> {
         let num_q = self.num_qubits();
 
         if target >= num_q {
-            return Err("Target qubit does not exist");
+            return Err(SimError::InvalidQubit);
         }
 
         let stride = 1 << (num_q - target - 1);
@@ -136,7 +136,7 @@ impl State {
     ///
     /// Returns an error if the instruction references an invalid qubit or otherwise
     /// cannot be applied to the state.
-    pub fn execute(&mut self, cmd: Instruction) -> Result<(), &'static str> {
+    pub fn execute(&mut self, cmd: Instruction) -> Result<(), SimError> {
         match cmd {
             // One Qubit Gates
             X { q } => self.apply_1q(q, &matrix::x()),
@@ -152,10 +152,10 @@ impl State {
             CRP { q_c, q_t, phi } => self.apply_c2q(q_c, q_t, &matrix::p(phi)),
 
             // Two Qubit Gates
-            SWAP { .. } => unimplemented!("SWAP is unimplemented!"),
+            SWAP { .. } => return Err(SimError::UnsupportedInstruction),
 
             // Subroutines
-            QFT => unimplemented!("QFT is unimplemented!"),
+            QFT => return Err(SimError::UnsupportedInstruction),
         }
     }
 
@@ -163,7 +163,7 @@ impl State {
     ///
     /// Returns an error if an instruction references an invalid qubit or otherwise
     /// cannot be applied to the state.
-    pub fn execute_all(&mut self, circuit: &[Instruction]) -> Result<(), &'static str> {
+    pub fn execute_all(&mut self, circuit: &[Instruction]) -> Result<(), SimError> {
         for &cmd in circuit {
             self.execute(cmd)?;
         }
@@ -182,11 +182,11 @@ impl State {
     ///
     /// Returns an error if `target` does not identify an existing qubit.
     #[cfg_attr(feature = "bench", visibility::make(pub))]
-    fn apply_1q(&mut self, target: usize, matrix: &SquareMatrix) -> Result<(), &'static str> {
+    fn apply_1q(&mut self, target: usize, matrix: &SquareMatrix) -> Result<(), SimError> {
         let num_q = self.n;
 
         if target >= num_q {
-            return Err("Target qubit does not exist");
+            return Err(SimError::InvalidQubit);
         }
 
         // Convert the target qubit into its state-vector stride.
@@ -204,7 +204,7 @@ impl State {
             } else {
                 kernels::portable::apply_1q_strided(amplitudes, stride, matrix);
             },
-            _ => unimplemented!("AVX and FMA are unimplemented!"),
+            _ => return Err(SimError::UnsupportedConfig),
         }
 
         Ok(())
@@ -221,12 +221,12 @@ impl State {
     /// Returns an error if either qubit does not exist or if `control` and `target`
     /// identify the same qubit.
     #[cfg_attr(feature = "bench", visibility::make(pub))]
-    fn apply_c2q(&mut self, control: usize, target: usize, matrix: &SquareMatrix) -> Result<(), &'static str> {
+    fn apply_c2q(&mut self, control: usize, target: usize, matrix: &SquareMatrix) -> Result<(), SimError> {
         if control >= self.n || target >= self.n {
-            return Err("Control and target must be existing qubits");
+            return Err(SimError::InvalidQubit);
         }
         if control == target {
-            return Err("Control and target must be distinct qubits");
+            return Err(SimError::InvalidQubit);
         }
 
         // Convert the control and target qubits into state-vector strides
@@ -251,9 +251,9 @@ impl State {
     /// the resulting measurement outcome.
     /// 
     /// Returns `true` if qubit is `|1⟩`.
-    pub fn measure(&mut self, target: usize) -> Result<bool, &'static str> {
+    pub fn measure(&mut self, target: usize) -> Result<bool, SimError> {
         if target >= self.n {
-            return Err("Target qubit does not exist");
+            return Err(SimError::InvalidQubit);
         }
 
         let (prob_0, prob_1) = self.probabilities(target)?;
