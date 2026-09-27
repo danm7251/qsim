@@ -13,6 +13,8 @@ pub use avx::{
 #[cfg(feature = "bench")]
 #[allow(deprecated)]
 pub use portable::{apply_1q_strided, apply_1q_kronecker, apply_c2q_strided, apply_c2q_kronecker};
+pub use fma::apply_1q as apply_1q_fma;
+pub use avx::apply_1q as apply_1q_avx;
 
 #[cfg(test)]
 mod tests {

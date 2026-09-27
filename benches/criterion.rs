@@ -6,6 +6,7 @@ use std::{hint::black_box, time::Duration};
 use criterion::{AxisScale, BenchmarkId, Criterion, PlotConfiguration, criterion_group, criterion_main};
 use ndarray::{array, Array1, Array2};
 use num_complex::Complex;
+use qsim::kernels::{apply_1q_avx, apply_1q_fma};
 use rand::{rng, RngExt};
 
 #[allow(deprecated)]
@@ -22,8 +23,7 @@ use common::{target_to_stride, zero_amplitudes, construct_qft_for_current, const
 // Active benchmarks.
 criterion_group!(
     benches,
-    bench_kron_vs_index_on_hadamard_over_qubits,
-    bench_kron_vs_index_on_cnot_over_qubits
+    bench_portable_vs_fma_vs_avx_on_hadamard_over_targets
 );
 
 criterion_main!(benches);
@@ -128,7 +128,142 @@ fn bench_kron_vs_index_on_cnot_over_qubits(c: &mut Criterion) {
     group.finish();
 }
 
-// STANDARD IN-PLACE KERNEL VS FMA ENABLED KERNEL
+// STANDARD IN-PLACE KERNEL VS FMA ENABLED KERNEL VS AVX ENABLED KERNEL
+
+fn bench_portable_vs_fma_vs_avx_on_hadamard_over_qubits(c: &mut Criterion) {
+    if !is_x86_feature_detected!("fma") || !is_x86_feature_detected!("avx") {
+        panic!("FMA and AVX unsupported on host machine!");
+    }
+
+    let mut group = c.benchmark_group("Hadamard Gate Performance over N: Portable vs FMA vs AVX");
+    let config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    group.plot_config(config);
+
+    let circuit_sizes = (3..21).step_by(2);
+
+    for n in circuit_sizes {
+        let stride = target_to_stride(n, n / 2);
+        let matrix = matrix::h();
+
+        let mut amplitudes = zero_amplitudes(n);
+        group.bench_with_input(
+            BenchmarkId::new("Portable", n),
+            &n,
+            |b, _| {
+                b.iter(|| {
+                    apply_1q_strided(
+                        black_box(&mut amplitudes),
+                        black_box(stride),
+                        black_box(&matrix),
+                    );
+                });
+            },
+        );
+
+        let mut amplitudes = zero_amplitudes(n);
+        unsafe {
+            group.bench_with_input(
+                BenchmarkId::new("FMA", n),
+                &n,
+                |b, _| {
+                    b.iter(|| {
+                        apply_1q_fma(
+                            black_box(&mut amplitudes),
+                            black_box(stride),
+                            black_box(&matrix),
+                        );
+                    });
+                },
+            );
+        }
+
+        let mut amplitudes = zero_amplitudes(n);
+        unsafe {
+            group.bench_with_input(
+                BenchmarkId::new("AVX", n),
+                &n,
+                |b, _| {
+                    b.iter(|| {
+                        apply_1q_avx(
+                            black_box(&mut amplitudes),
+                            black_box(stride),
+                            black_box(&matrix),
+                        );
+                    });
+                },
+            );
+        }
+    }
+
+    group.finish();
+}
+
+fn bench_portable_vs_fma_vs_avx_on_hadamard_over_targets(c: &mut Criterion) {
+    if !is_x86_feature_detected!("fma") || !is_x86_feature_detected!("avx") {
+        panic!("FMA and AVX unsupported on host machine!");
+    }
+
+    let mut group = c.benchmark_group("Hadamard Gate Performance over T at 17: Portable vs FMA vs AVX");
+    let n = 17;
+
+    for t in 0..n {
+        let stride = target_to_stride(n, t);
+        let matrix = matrix::h();
+
+        let mut amplitudes = zero_amplitudes(n);
+        group.bench_with_input(
+            BenchmarkId::new("Portable", t),
+            &t,
+            |b, _| {
+                b.iter(|| {
+                    apply_1q_strided(
+                        black_box(&mut amplitudes),
+                        black_box(stride),
+                        black_box(&matrix),
+                    );
+                });
+            },
+        );
+
+        let mut amplitudes = zero_amplitudes(n);
+        unsafe {
+            group.bench_with_input(
+                BenchmarkId::new("FMA", t),
+                &t,
+                |b, _| {
+                    b.iter(|| {
+                        apply_1q_fma(
+                            black_box(&mut amplitudes),
+                            black_box(stride),
+                            black_box(&matrix),
+                        );
+                    });
+                },
+            );
+        }
+
+        if stride > 1 {
+            let mut amplitudes = zero_amplitudes(n);
+            unsafe {
+                group.bench_with_input(
+                    BenchmarkId::new("AVX", t),
+                    &t,
+                    |b, _| {
+                        b.iter(|| {
+                            apply_1q_avx(
+                                black_box(&mut amplitudes),
+                                black_box(stride),
+                                black_box(&matrix),
+                            );
+                        });
+                    },
+                );
+            }
+        }
+    }
+
+    group.finish();
+}
 
 // STANDARD IN-PLACE KERNEL VS AVX2 ENABLED PORTABLE SIMD KERNEL
 

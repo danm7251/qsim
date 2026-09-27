@@ -124,7 +124,7 @@ impl SplattedMatrix {
 }
 
 #[target_feature(enable = "avx")]
-fn apply_1q_portable(amps: &mut[Complex64], t_stride: usize, matrix: &SquareMatrix) {
+pub fn apply_1q_portable(amps: &mut[Complex64], t_stride: usize, matrix: &SquareMatrix) {
     debug_assert!(t_stride >= 2);
     debug_assert_eq!(t_stride % 2, 0);
 
