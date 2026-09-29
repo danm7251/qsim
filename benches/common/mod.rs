@@ -89,3 +89,26 @@ pub fn construct_qft_for_current(n: usize) -> Vec<Instruction> {
 
     circuit
 }
+
+pub fn construct_clifford_circuit(num_qubits: usize, depth: usize) -> Vec<Instruction> {
+    let mut circuit = Vec::with_capacity(depth * (2 * num_qubits - 1));
+
+    for _ in 0..depth {
+        // Hadamard layer.
+        for q in 0..num_qubits {
+            circuit.push(Instruction::H { q });
+        }
+
+        // Nearest-neighbour CNOT layer.
+        for q in 0..num_qubits - 1 {
+            circuit.push(
+                Instruction::CNOT {
+                    q_c: q,
+                    q_t: q + 1,
+                }
+            );
+        }
+    }
+
+    circuit
+}

@@ -14,11 +14,18 @@ use qsim::{
     kernels::{AvxVariant, apply_1q_avx_with_variant, apply_1q_strided, apply_1q_kronecker, apply_c2q_strided, apply_c2q_kronecker},
     legacy::{LegacyState, gates::Gate},
     linalg::{SquareMatrix, Vector, linear_map, matrix},
-    state::State
+    state::State,
+    stabilizer::Stabilizer
 };
 
 mod common;
-use common::{target_to_stride, zero_amplitudes, construct_qft_for_current, construct_qft_for_legacy};
+use common::{
+    target_to_stride,
+    zero_amplitudes,
+    construct_qft_for_current,
+    construct_qft_for_legacy,
+    construct_clifford_circuit
+};
 
 // Active benchmarks.
 criterion_group!(
@@ -260,6 +267,59 @@ fn bench_portable_vs_fma_vs_avx_on_hadamard_over_targets(c: &mut Criterion) {
                 );
             }
         }
+    }
+
+    group.finish();
+}
+
+// STATEVECTOR VS STABILIZER REPRESENTATIONS
+
+fn bench_statevector_vs_stabilizer_over_qubits(c: &mut Criterion) {
+    let mut group = c.benchmark_group(
+        "Clifford Circuit Performance: Statevector vs Stabilizer"
+    );
+
+    let config = PlotConfiguration::default()
+        .summary_scale(AxisScale::Logarithmic);
+
+    group.plot_config(config);
+
+    let circuit_sizes = (3..21).step_by(2);
+
+    for n in circuit_sizes {
+        let circuit = construct_clifford_circuit(n, 10);
+
+        group.bench_with_input(
+            BenchmarkId::new("Statevector", n),
+            &n,
+            |b, &n| {
+                b.iter(|| {
+                    let mut state = State::zero(n).unwrap();
+
+                    for &instruction in &circuit {
+                        state.execute(black_box(instruction)).unwrap();
+                    }
+
+                    black_box(state);
+                });
+            },
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new("Stabilizer", n),
+            &n,
+            |b, &n| {
+                b.iter(|| {
+                    let mut state = Stabilizer::zero(n).unwrap();
+
+                    for &instruction in &circuit {
+                        state.execute(black_box(instruction)).unwrap();
+                    }
+
+                    black_box(state);
+                });
+            },
+        );
     }
 
     group.finish();

@@ -8,4 +8,5 @@ pub mod error;
 pub mod kernels;
 pub mod legacy;
 pub mod linalg;
+pub mod stabilizer;
 pub mod state;

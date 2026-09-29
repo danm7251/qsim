@@ -10,7 +10,7 @@ pub use avx::{
 };
 
 // Allows benchmarking the generic kernel directly.
-#[cfg(feature = "bench")]
+//#[cfg(feature = "bench")]
 #[allow(deprecated)]
 pub use portable::{apply_1q_strided, apply_1q_kronecker, apply_c2q_strided, apply_c2q_kronecker};
 pub use fma::apply_1q as apply_1q_fma;
