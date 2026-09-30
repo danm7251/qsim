@@ -14,7 +14,7 @@ use qsim::{
     kernels::{AvxVariant, apply_1q_avx_with_variant, apply_1q_strided, apply_1q_kronecker, apply_c2q_strided, apply_c2q_kronecker},
     legacy::{LegacyState, gates::Gate},
     linalg::{SquareMatrix, Vector, linear_map, matrix},
-    state::State,
+    statevector::Statevector,
     stabilizer::Stabilizer
 };
 

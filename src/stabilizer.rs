@@ -202,7 +202,7 @@ impl Stabilizer {
 mod test {
 
     use super::*;
-    use crate::state::State;
+    use crate::statevector::Statevector;
 
     #[test]
     fn zero_state_is_initialised_correctly() {
@@ -368,13 +368,13 @@ mod test {
             tableau.execute(cmd).unwrap();
         }
 
-        let mut reference = State::zero(n).unwrap();
+        let mut reference = Statevector::zero(n).unwrap();
         reference.execute_all(circuit).unwrap();
         let expected = reference.amplitudes().to_vec();
 
         // Only the stabilizer generators are checked.
         for row in n..2 * n {
-            let mut state = State::zero(n).unwrap();
+            let mut state = Statevector::zero(n).unwrap();
             state.execute_all(circuit).unwrap();
 
             // Apply the Pauli operator described by the row, ignoring its sign.

@@ -9,6 +9,9 @@ use num_complex::Complex;
 // Floating point precision parameter.
 pub type Element = Complex<f64>;
 
+// Shorthand helper
+pub const C64: fn(f64, f64) -> Element = |re: f64, im: f64| Element::new(re, im);
+
 // Multi-type operations.
 
 /// Multiplies a vector by a matrix allocating a new vector of equal length.

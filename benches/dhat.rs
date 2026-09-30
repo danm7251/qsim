@@ -13,7 +13,7 @@ use qsim::{
     kernels::{apply_1q_kronecker, apply_1q_strided, apply_c2q_kronecker, apply_c2q_strided},
     legacy::{LegacyState, gates::Gate},
     linalg::{SquareMatrix, Vector, linear_map, matrix},
-    state::State
+    statevector::Statevector
 };
 
 mod common;
