@@ -3,29 +3,455 @@
 
 use std::{hint::black_box, time::Duration};
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{AxisScale, BenchmarkId, Criterion, PlotConfiguration, criterion_group, criterion_main};
 use ndarray::{array, Array1, Array2};
 use num_complex::Complex;
+use qsim::kernels::{apply_1q_avx, apply_1q_fma};
 use rand::{rng, RngExt};
 
+#[allow(deprecated)]
 use qsim::{
+    kernels::{AvxVariant, apply_1q_avx_with_variant, apply_1q_strided, apply_1q_kronecker, apply_c2q_strided, apply_c2q_kronecker},
     legacy::{LegacyState, gates::Gate},
-    linalg::{SquareMatrix, Vector, linear_map},
+    linalg::{SquareMatrix, Vector, linear_map, matrix},
     state::State,
+    stabilizer::Stabilizer
 };
 
 mod common;
-use common::{construct_qft_for_current, construct_qft_for_legacy};
+use common::{
+    target_to_stride,
+    zero_amplitudes,
+    construct_qft_for_current,
+    construct_qft_for_legacy,
+    construct_clifford_circuit
+};
 
 // Active benchmarks.
 criterion_group!(
     benches,
-    bench_legacy_vs_current_state_with_qft
+    bench_portable_vs_fma_vs_avx_on_hadamard_over_targets
 );
 
 criterion_main!(benches);
 
+// MAIN RESULTS
+
+// KRONECKER EXPANSION KERNEL VS STANDARD IN-PLACE KERNEL
+
+fn bench_kron_vs_index_on_hadamard_over_qubits(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Hadamard Gate Performance: Kronecker Expansion vs Direct Indexing");
+    let config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    group.plot_config(config);
+
+    let circuit_sizes = (3..14).step_by(2);
+
+    for n in circuit_sizes {
+        let stride = target_to_stride(n, n / 2);
+        let matrix = matrix::h();
+
+        let mut amplitudes = zero_amplitudes(n);
+        #[allow(deprecated)]
+        group.bench_with_input(
+            BenchmarkId::new("Kronecker expansion", n),
+            &n,
+            |b, _| {
+                b.iter(|| {
+                    apply_1q_kronecker(
+                        black_box(&mut amplitudes),
+                        black_box(stride),
+                        black_box(&matrix),
+                    );
+                });
+            },
+        );
+
+        let mut amplitudes = zero_amplitudes(n);
+        group.bench_with_input(
+            BenchmarkId::new("Direct indexing", n),
+            &n,
+            |b, _| {
+                b.iter(|| {
+                    apply_1q_strided(
+                        black_box(&mut amplitudes),
+                        black_box(stride),
+                        black_box(&matrix),
+                    );
+                });
+            },
+        );
+    }
+
+    group.finish();
+}
+
+/// Benchmarks CNOT(CX) application by providing C2Q kernels with an X matrix.
+fn bench_kron_vs_index_on_cnot_over_qubits(c: &mut Criterion) {
+    let mut group = c.benchmark_group("CNOT Gate Performance: Kronecker Expansion vs Direct Indexing");
+    let config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    group.plot_config(config);
+
+    let circuit_sizes = (3..14).step_by(2);
+
+    for n in circuit_sizes {
+        let c_stride = target_to_stride(n, 0);
+        let t_stride = target_to_stride(n, n / 2);
+        let matrix = matrix::x();
+
+        let mut amplitudes = zero_amplitudes(n);
+        #[allow(deprecated)]
+        group.bench_with_input(
+            BenchmarkId::new("Kronecker expansion", n),
+            &n,
+            |b, _| {
+                b.iter(|| {
+                    apply_c2q_kronecker(
+                        black_box(&mut amplitudes),
+                        black_box(c_stride),
+                        black_box(t_stride),
+                        black_box(&matrix),
+                    );
+                });
+            },
+        );
+
+        let mut amplitudes = zero_amplitudes(n);
+        group.bench_with_input(
+            BenchmarkId::new("Direct indexing", n),
+            &n,
+            |b, _| {
+                b.iter(|| {
+                    apply_c2q_strided(
+                        black_box(&mut amplitudes),
+                        black_box(c_stride),
+                        black_box(t_stride),
+                        black_box(&matrix),
+                    );
+                });
+            },
+        );
+    }
+
+    group.finish();
+}
+
+// STANDARD IN-PLACE KERNEL VS FMA ENABLED KERNEL VS AVX ENABLED KERNEL
+
+fn bench_portable_vs_fma_vs_avx_on_hadamard_over_qubits(c: &mut Criterion) {
+    if !is_x86_feature_detected!("fma") || !is_x86_feature_detected!("avx") {
+        panic!("FMA and AVX unsupported on host machine!");
+    }
+
+    let mut group = c.benchmark_group("Hadamard Gate Performance over N: Portable vs FMA vs AVX");
+    let config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    group.plot_config(config);
+
+    let circuit_sizes = (3..21).step_by(2);
+
+    for n in circuit_sizes {
+        let stride = target_to_stride(n, n / 2);
+        let matrix = matrix::h();
+
+        let mut amplitudes = zero_amplitudes(n);
+        group.bench_with_input(
+            BenchmarkId::new("Portable", n),
+            &n,
+            |b, _| {
+                b.iter(|| {
+                    apply_1q_strided(
+                        black_box(&mut amplitudes),
+                        black_box(stride),
+                        black_box(&matrix),
+                    );
+                });
+            },
+        );
+
+        let mut amplitudes = zero_amplitudes(n);
+        unsafe {
+            group.bench_with_input(
+                BenchmarkId::new("FMA", n),
+                &n,
+                |b, _| {
+                    b.iter(|| {
+                        apply_1q_fma(
+                            black_box(&mut amplitudes),
+                            black_box(stride),
+                            black_box(&matrix),
+                        );
+                    });
+                },
+            );
+        }
+
+        let mut amplitudes = zero_amplitudes(n);
+        unsafe {
+            group.bench_with_input(
+                BenchmarkId::new("AVX", n),
+                &n,
+                |b, _| {
+                    b.iter(|| {
+                        apply_1q_avx(
+                            black_box(&mut amplitudes),
+                            black_box(stride),
+                            black_box(&matrix),
+                        );
+                    });
+                },
+            );
+        }
+    }
+
+    group.finish();
+}
+
+fn bench_portable_vs_fma_vs_avx_on_hadamard_over_targets(c: &mut Criterion) {
+    if !is_x86_feature_detected!("fma") || !is_x86_feature_detected!("avx") {
+        panic!("FMA and AVX unsupported on host machine!");
+    }
+
+    let mut group = c.benchmark_group("Hadamard Gate Performance over T at 17: Portable vs FMA vs AVX");
+    let n = 17;
+
+    for t in 0..n {
+        let stride = target_to_stride(n, t);
+        let matrix = matrix::h();
+
+        let mut amplitudes = zero_amplitudes(n);
+        group.bench_with_input(
+            BenchmarkId::new("Portable", t),
+            &t,
+            |b, _| {
+                b.iter(|| {
+                    apply_1q_strided(
+                        black_box(&mut amplitudes),
+                        black_box(stride),
+                        black_box(&matrix),
+                    );
+                });
+            },
+        );
+
+        let mut amplitudes = zero_amplitudes(n);
+        unsafe {
+            group.bench_with_input(
+                BenchmarkId::new("FMA", t),
+                &t,
+                |b, _| {
+                    b.iter(|| {
+                        apply_1q_fma(
+                            black_box(&mut amplitudes),
+                            black_box(stride),
+                            black_box(&matrix),
+                        );
+                    });
+                },
+            );
+        }
+
+        if stride > 1 {
+            let mut amplitudes = zero_amplitudes(n);
+            unsafe {
+                group.bench_with_input(
+                    BenchmarkId::new("AVX", t),
+                    &t,
+                    |b, _| {
+                        b.iter(|| {
+                            apply_1q_avx(
+                                black_box(&mut amplitudes),
+                                black_box(stride),
+                                black_box(&matrix),
+                            );
+                        });
+                    },
+                );
+            }
+        }
+    }
+
+    group.finish();
+}
+
+// STATEVECTOR VS STABILIZER REPRESENTATIONS
+
+fn bench_statevector_vs_stabilizer_over_qubits(c: &mut Criterion) {
+    let mut group = c.benchmark_group(
+        "Clifford Circuit Performance: Statevector vs Stabilizer"
+    );
+
+    let config = PlotConfiguration::default()
+        .summary_scale(AxisScale::Logarithmic);
+
+    group.plot_config(config);
+
+    let circuit_sizes = (3..21).step_by(2);
+
+    for n in circuit_sizes {
+        let circuit = construct_clifford_circuit(n, 10);
+
+        group.bench_with_input(
+            BenchmarkId::new("Statevector", n),
+            &n,
+            |b, &n| {
+                b.iter(|| {
+                    let mut state = State::zero(n).unwrap();
+
+                    for &instruction in &circuit {
+                        state.execute(black_box(instruction)).unwrap();
+                    }
+
+                    black_box(state);
+                });
+            },
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new("Stabilizer", n),
+            &n,
+            |b, &n| {
+                b.iter(|| {
+                    let mut state = Stabilizer::zero(n).unwrap();
+
+                    for &instruction in &circuit {
+                        state.execute(black_box(instruction)).unwrap();
+                    }
+
+                    black_box(state);
+                });
+            },
+        );
+    }
+
+    group.finish();
+}
+
+// STANDARD IN-PLACE KERNEL VS AVX2 ENABLED PORTABLE SIMD KERNEL
+
+// STANDARD IN-PLACE KERNEL VS AVX2+FMA ENABLED PORTABLE SIMD KERNEL
+
+// STANDARD IN-PLACE KERNEL VS PARALLEL KERNEL
+
+// STANDARD IN-PLACE KERNEL VS STABILIZER BACKEND 
+
 // KERNEL COMPARISONS
+
+/// Compares the generic kernel and AVX variants across target qubits.
+#[allow(unused)]
+fn bench_generic_vs_avx_over_targets(c: &mut Criterion) {
+    let mut group = c.benchmark_group("1Q Kernel Variants by Target");
+    group.measurement_time(Duration::from_secs(10));
+
+    let n = 16;
+    let gate = matrix::y();
+
+    // The final target has stride 1, which the SIMD kernel cannot process.
+    let targets = [
+        0,
+        n / 2,
+        n - 2,
+    ];
+
+    for target in targets {
+        let stride = 1 << (n - target - 1);
+        let mut amplitudes = zero_amplitudes(n);
+
+        group.bench_with_input(
+            BenchmarkId::new("generic", target),
+            &target,
+            |b, _| {
+                b.iter(|| {
+                    apply_1q_strided(
+                        black_box(&mut amplitudes),
+                        black_box(stride),
+                        black_box(&gate),
+                    );
+                });
+            },
+        );
+
+        let variants = [
+            ("avx-scalar", AvxVariant::Scalar),
+            ("avx-portable", AvxVariant::Portable),
+        ];
+
+        for (name, variant) in variants {
+            let mut amplitudes = zero_amplitudes(n);
+
+            group.bench_with_input(
+                BenchmarkId::new(name, target),
+                &target,
+                |b, _| {
+                    b.iter(|| unsafe {
+                        apply_1q_avx_with_variant(
+                            black_box(&mut amplitudes),
+                            black_box(stride),
+                            black_box(&gate),
+                            variant,
+                        );
+                    });
+                },
+            );
+        }
+    }
+
+    group.finish();
+}
+
+/// Compares the generic kernel and AVX variants across state-vector sizes.
+#[allow(unused)]
+fn bench_generic_vs_avx_over_n(c: &mut Criterion) {
+    let mut group = c.benchmark_group("1Q Kernel Variants by Qubits");
+    group.measurement_time(Duration::from_secs(10));
+
+    let qubit_counts = [4, 8, 12, 16, 20];
+    let target = 0;
+    let gate = matrix::y();
+
+    for n in qubit_counts {
+        let stride = 1 << (n - target - 1);
+        let mut amplitudes = zero_amplitudes(n);
+
+        group.bench_with_input(
+            BenchmarkId::new("generic", n),
+            &n,
+            |b, _| {
+                b.iter(|| {
+                    apply_1q_strided(
+                        black_box(&mut amplitudes),
+                        black_box(stride),
+                        black_box(&gate),
+                    );
+                });
+            },
+        );
+
+        let variants = [
+            ("avx-scalar", AvxVariant::Scalar),
+            ("avx-portable", AvxVariant::Portable),
+        ];
+
+        for (name, variant) in variants {
+            let mut amplitudes = zero_amplitudes(n);
+
+            group.bench_with_input(
+                BenchmarkId::new(name, n),
+                &n,
+                |b, _| {
+                    b.iter(|| unsafe {
+                        apply_1q_avx_with_variant(
+                            black_box(&mut amplitudes),
+                            black_box(stride),
+                            black_box(&gate),
+                            variant,
+                        );
+                    });
+                },
+            );
+        }
+    }
+
+    group.finish();
+}
 
 /// Compares the index and Kronecker-product implementations of a
 /// single-qubit gate across different target qubits.

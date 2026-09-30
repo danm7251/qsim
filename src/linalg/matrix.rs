@@ -2,7 +2,7 @@ use std::f64::consts::{FRAC_1_SQRT_2};
 
 use super::Element;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SquareMatrix {
     elements: Vec<Element>,
     size: usize
@@ -59,6 +59,20 @@ impl SquareMatrix {
 pub fn i() -> SquareMatrix {
     SquareMatrix::from_array([
         [(1., 0. ), (0., 0. )],
+        [(0., 0. ), (1., 0. )]
+    ])
+}
+
+pub fn p0() -> SquareMatrix {
+    SquareMatrix::from_array([
+        [(1., 0. ), (0., 0. )],
+        [(0., 0. ), (0., 0. )]
+    ])
+}
+
+pub fn p1() -> SquareMatrix {
+    SquareMatrix::from_array([
+        [(0., 0. ), (0., 0. )],
         [(0., 0. ), (1., 0. )]
     ])
 }

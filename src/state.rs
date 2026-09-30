@@ -2,9 +2,14 @@ use num_complex::Complex64;
 use rand::random;
 
 use crate::{
-    api::Instruction::{self, *},
-    linalg::{linear_map, matrix, SquareMatrix, Vector}
+    api::Instruction::{self, *}, error::SimError, kernels, linalg::{SquareMatrix, Vector, matrix}
 };
+
+#[derive(Clone, Copy, Debug)]
+pub struct Config {
+    pub avx: bool,
+    pub fma: bool,
+}
 
 /// A quantum state represented by a statevector.
 ///
@@ -12,7 +17,8 @@ use crate::{
 /// to the most significant bit of the amplitude index.
 pub struct State {
     amplitudes: Vector,
-    n: usize
+    n: usize,
+    config: Config,
 }
 
 impl State {
@@ -22,19 +28,59 @@ impl State {
     ///
     /// # Errors
     ///
-    /// Returns an error if `circuit_size` is `0`.
+    /// Returns an error if `num_qubits` is `0`.
     #[cfg_attr(feature = "trace", tracing::instrument(name = "Zero State Construction", err))]
-    pub fn zero(num_qubits: usize) -> Result<Self, &'static str> {
+    pub fn zero(num_qubits: usize) -> Result<Self, SimError> {
+        // Validation.
         if num_qubits == 0 {
-            return Err("A state with 0 qubits is invalid");
+            return Err(SimError::ZeroQubits);
         }
 
+        // Amplitudes setup.
+        let mut amplitudes = Vector::zeros(1 << num_qubits);
+        *amplitudes.get_mut(0) = Complex64::ONE;
+
+        // Auto Config setup.
+        let config = Config {
+            avx: false, //is_x86_feature_detected!("avx"),
+            fma: is_x86_feature_detected!("fma"),
+        };
+
+        Ok(Self {
+            amplitudes,
+            n: num_qubits,
+            config: config,
+        })
+    }
+
+    /// Creates the `|0...0⟩` state for `num_qubits` qubits.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - `num_qubits` is `0`.
+    /// - host CPU does not support `config` values.
+    #[cfg_attr(feature = "trace", tracing::instrument(name = "Zero State Construction", err))]
+    pub fn zero_with_config(num_qubits: usize, config: Config) -> Result<Self, SimError> {
+        // Validation.
+        if num_qubits == 0 {
+            return Err(SimError::ZeroQubits);
+        }
+        if config.avx && !is_x86_feature_detected!("avx") {
+            return Err(SimError::AvxUnsupported);
+        }
+        if config.fma && !is_x86_feature_detected!("fma") {
+            return Err(SimError::FmaUnsupported);
+        }
+
+        // Amplitudes setup.
         let mut amplitudes = Vector::zeros(1 << num_qubits);
         *amplitudes.get_mut(0) = Complex64::ONE;
 
         Ok(Self {
             amplitudes,
-            n: num_qubits
+            n: num_qubits,
+            config: config,
         })
     }
 
@@ -63,11 +109,11 @@ impl State {
     ///
     /// The returned tuple contains the probabilities of measuring the qubit as
     /// `|0⟩` and `|1⟩`, respectively.
-    pub fn probabilities(&self, target: usize) -> Result<(f64, f64), &'static str> {
+    pub fn probabilities(&self, target: usize) -> Result<(f64, f64), SimError> {
         let num_q = self.num_qubits();
 
         if target >= num_q {
-            return Err("Target qubit does not exist");
+            return Err(SimError::InvalidQubit);
         }
 
         let stride = 1 << (num_q - target - 1);
@@ -90,7 +136,7 @@ impl State {
     ///
     /// Returns an error if the instruction references an invalid qubit or otherwise
     /// cannot be applied to the state.
-    pub fn execute(&mut self, cmd: Instruction) -> Result<(), &'static str> {
+    pub fn execute(&mut self, cmd: Instruction) -> Result<(), SimError> {
         match cmd {
             // One Qubit Gates
             X { q } => self.apply_1q(q, &matrix::x()),
@@ -106,117 +152,94 @@ impl State {
             CRP { q_c, q_t, phi } => self.apply_c2q(q_c, q_t, &matrix::p(phi)),
 
             // Two Qubit Gates
-            SWAP { .. } => unimplemented!("SWAP is unimplemented!"),
+            SWAP { .. } => return Err(SimError::UnsupportedInstruction),
 
             // Subroutines
-            QFT => unimplemented!("QFT is unimplemented!"),
+            QFT => return Err(SimError::UnsupportedInstruction),
         }
     }
 
-    // Gate kernels
-
-    /// Applies a single-qubit gate to all amplitude pairs associated with `target`.
-    #[cfg_attr(feature = "bench", visibility::make(pub))]
-    #[cfg_attr(feature = "trace", tracing::instrument(skip(self, gate_matrix), name = "1 Qubit Gate Strided", err))]
-    fn apply_1q(&mut self, target: usize, gate_matrix: &SquareMatrix) -> Result<(), &'static str> {
-        let num_q = self.n;
-
-        if target >= num_q {
-            return Err("Target qubit does not exist");
-        }
-
-        let stride = 1 << (num_q - target - 1);
-
-        for offset in (0..self.amplitudes.len()).step_by(2 * stride) {
-            for index_low in offset..(offset + stride) {
-                // Pair amplitudes whose bitstrings differ only at the target qubit.
-                let index_high = index_low + stride;
-
-                let pair = Vector::from_elements([
-                    *self.amplitudes.get(index_low),
-                    *self.amplitudes.get(index_high)
-                ]);
-
-                // Apply the gate to the subspace.
-                let updated_pair = linear_map(gate_matrix, &pair);
-
-                *self.amplitudes.get_mut(index_low) = *updated_pair.get(0);
-                *self.amplitudes.get_mut(index_high) = *updated_pair.get(1);
-            }
+    /// Applies an collection of [`Instruction`]s to the state, updating its amplitudes as required.
+    ///
+    /// Returns an error if an instruction references an invalid qubit or otherwise
+    /// cannot be applied to the state.
+    pub fn execute_all(&mut self, circuit: &[Instruction]) -> Result<(), SimError> {
+        for &cmd in circuit {
+            self.execute(cmd)?;
         }
 
         Ok(())
     }
 
-    /// Applies a controlled two-qubit gate to amplitude pairs associated with `target`,
-    /// where the operation is applied only when `control` is in the `|1⟩` state.
+    // Gate kernels
+
+    /// Applies a single-qubit `matrix` to `target`.
+    ///
+    /// Selects the configured kernel after validating the target and calculating
+    /// its state-vector stride.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `target` does not identify an existing qubit.
     #[cfg_attr(feature = "bench", visibility::make(pub))]
-    #[cfg_attr(feature = "trace", tracing::instrument(skip(self, gate_matrix), name = "2 Qubit Gate Strided", err))]
-    fn apply_c2q(&mut self, control: usize, target: usize, gate_matrix: &SquareMatrix) -> Result<(), &'static str> {
+    fn apply_1q(&mut self, target: usize, matrix: &SquareMatrix) -> Result<(), SimError> {
         let num_q = self.n;
-        let num_amps = self.amplitudes.len();
 
-        if control >= num_q || target >= num_q {
-            return Err("Control and target must be existing qubits");
+        if target >= num_q {
+            return Err(SimError::InvalidQubit);
         }
 
+        // Convert the target qubit into its state-vector stride.
+        let stride = 1 << (num_q - target - 1);
+        
+        let config = self.config;
+        let amplitudes = self.amplitudes.as_mut_slice();
+
+        // Dispatch to the configured kernel.
+        match (config.avx, config.fma) {
+            (false, false) => kernels::portable::apply_1q_strided(amplitudes, stride, matrix),
+            (false, true) => unsafe { kernels::fma::apply_1q(amplitudes, stride, matrix) },
+            (true, false) => if stride > 1 {
+                unsafe { kernels::avx::apply_1q(amplitudes, stride, matrix) }
+            } else {
+                kernels::portable::apply_1q_strided(amplitudes, stride, matrix);
+            },
+            _ => return Err(SimError::UnsupportedConfig),
+        }
+
+        Ok(())
+    }
+
+    /// Applies a controlled single-qubit `matrix` to `target`.
+    ///
+    /// The operation is applied only to amplitudes where `control` is `|1⟩`.
+    /// After validation, both qubits are converted into state-vector strides and
+    /// passed to the configured kernel.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if either qubit does not exist or if `control` and `target`
+    /// identify the same qubit.
+    #[cfg_attr(feature = "bench", visibility::make(pub))]
+    fn apply_c2q(&mut self, control: usize, target: usize, matrix: &SquareMatrix) -> Result<(), SimError> {
+        if control >= self.n || target >= self.n {
+            return Err(SimError::InvalidQubit);
+        }
         if control == target {
-            return Err("Control and target must be distinct qubits");
+            return Err(SimError::InvalidQubit);
         }
 
-        let c_stride = 1 << (num_q - control - 1);
-        let t_stride = 1 << (num_q - target - 1);
+        // Convert the control and target qubits into state-vector strides
+        let c_stride = 1 << (self.n - control - 1);
+        let t_stride = 1 << (self.n - target - 1);
 
-        if control > target {
-            // Target is more significant, so select T=0 blocks before C=1 blocks.
-            for t_block in (0..num_amps).step_by(2 * t_stride) {
-                let t_is_zero = t_block..(t_block + t_stride);
+        let config = self.config;
+        let amplitudes = self.amplitudes.as_mut_slice();
 
-                for c_block in t_is_zero.step_by(2 * c_stride) {
-                    let c_is_one = (c_block + c_stride)..(c_block + 2 * c_stride);
-
-                    for index_low in c_is_one {
-                        // Pair amplitudes whose bitstrings differ only at the target qubit.
-                        let index_high = index_low + t_stride;
-
-                        let pair = Vector::from_elements([
-                            *self.amplitudes.get(index_low),
-                            *self.amplitudes.get(index_high)
-                        ]);
-
-                        // Apply the gate to the subspace.
-                        let updated_pair = linear_map(gate_matrix, &pair);
-
-                        *self.amplitudes.get_mut(index_low) = *updated_pair.get(0);
-                        *self.amplitudes.get_mut(index_high) = *updated_pair.get(1);
-                    }
-                }
-            }
-        } else {
-            // Control is more significant, so select C=1 blocks before T=0 blocks.
-            for c_block in (c_stride..num_amps).step_by(2 * c_stride) {
-                let c_is_one = c_block..(c_block + c_stride);
-
-                for t_block in c_is_one.step_by(2 * t_stride) {
-                    let t_is_zero = t_block..(t_block + t_stride);
-
-                    for index_low in t_is_zero {
-                        // Pair amplitudes whose bitstrings differ only at the target qubit.
-                        let index_high = index_low + t_stride;
-
-                        let pair = Vector::from_elements([
-                            *self.amplitudes.get(index_low),
-                            *self.amplitudes.get(index_high)
-                        ]);
-
-                        // Apply the gate to the subspace.
-                        let updated_pair = linear_map(gate_matrix, &pair);
-
-                        *self.amplitudes.get_mut(index_low) = *updated_pair.get(0);
-                        *self.amplitudes.get_mut(index_high) = *updated_pair.get(1);
-                    }
-                }
-            }
+        match (config.avx, config.fma) {
+            (false, false) => kernels::portable::apply_c2q_strided(amplitudes, c_stride, t_stride, matrix),
+            (false, true) => unsafe { kernels::fma::apply_c2q(amplitudes, c_stride, t_stride, matrix) },
+            _ => unimplemented!("AVX and FMA are unimplemented!"),
         }
 
         Ok(())
@@ -228,11 +251,9 @@ impl State {
     /// the resulting measurement outcome.
     /// 
     /// Returns `true` if qubit is `|1⟩`.
-    pub fn measure(&mut self, target: usize) -> Result<bool, &'static str> {
-        let num_qubits = self.n;
-
-        if target >= num_qubits {
-            return Err("Target qubit does not exist");
+    pub fn measure(&mut self, target: usize) -> Result<bool, SimError> {
+        if target >= self.n {
+            return Err(SimError::InvalidQubit);
         }
 
         let (prob_0, prob_1) = self.probabilities(target)?;
@@ -249,7 +270,7 @@ impl State {
             outcome_is_one as u8,
         );
 
-        let stride = 1 << (num_qubits - target - 1);
+        let stride = 1 << (self.n - target - 1);
 
         // Collapse and renormalise the state.
         for offset in (0..self.amplitudes.len()).step_by(2 * stride) {

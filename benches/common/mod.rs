@@ -1,6 +1,22 @@
 use std::f64::consts::PI;
 
+use num_complex::Complex;
+
 use qsim::{api::Instruction, legacy::gates::Gate};
+
+pub fn target_to_stride(n: usize, t: usize) -> usize {
+    assert!(t < n, "target qubit out of range");
+
+    1 << (n - t - 1)
+}
+
+pub fn zero_amplitudes(n: usize) -> Vec<Complex<f64>> {
+    let mut amplitudes =
+        vec![Complex::new(0.0, 0.0); 1 << n];
+
+    amplitudes[0] = Complex::new(1.0, 0.0);
+    amplitudes
+}
 
 pub fn construct_qft_for_legacy(n: usize) -> Vec<Gate> {
     let mut circuit = Vec::<Gate>::new();
@@ -69,6 +85,29 @@ pub fn construct_qft_for_current(n: usize) -> Vec<Instruction> {
             q_c: i,
             q_t: swap_qubit,
         });
+    }
+
+    circuit
+}
+
+pub fn construct_clifford_circuit(num_qubits: usize, depth: usize) -> Vec<Instruction> {
+    let mut circuit = Vec::with_capacity(depth * (2 * num_qubits - 1));
+
+    for _ in 0..depth {
+        // Hadamard layer.
+        for q in 0..num_qubits {
+            circuit.push(Instruction::H { q });
+        }
+
+        // Nearest-neighbour CNOT layer.
+        for q in 0..num_qubits - 1 {
+            circuit.push(
+                Instruction::CNOT {
+                    q_c: q,
+                    q_t: q + 1,
+                }
+            );
+        }
     }
 
     circuit
