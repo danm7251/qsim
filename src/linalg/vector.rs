@@ -2,13 +2,13 @@ use super::Element;
 
 #[derive(Debug)]
 pub struct Vector {
-    elements: Vec<Element>
+    elements: Vec<Element>,
 }
 
 impl Vector {
     pub fn zeros(len: usize) -> Self {
         Self {
-            elements: vec![Element::ZERO; len]
+            elements: vec![Element::ZERO; len],
         }
     }
 

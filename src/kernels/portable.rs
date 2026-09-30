@@ -6,13 +6,16 @@
 
 use num_complex::Complex64;
 
-use crate::linalg::{matrix, SquareMatrix};
+use crate::linalg::{SquareMatrix, matrix};
 
 /// Applies `matrix` to every amplitude pair separated by `t_stride`.
 ///
 /// `t_stride` must identify a valid target-qubit stride within `amps`.
-#[cfg_attr(feature = "trace", tracing::instrument(skip(amps), name = "1 Qubit Gate (Strided)"))]
-pub fn apply_1q_strided(amps: &mut[Complex64], t_stride: usize, matrix: &SquareMatrix) {
+#[cfg_attr(
+    feature = "trace",
+    tracing::instrument(skip(amps), name = "1 Qubit Gate (Strided)")
+)]
+pub fn apply_1q_strided(amps: &mut [Complex64], t_stride: usize, matrix: &SquareMatrix) {
     for offset in (0..amps.len()).step_by(2 * t_stride) {
         for index_low in offset..(offset + t_stride) {
             apply_pair(amps, index_low, t_stride, matrix);
@@ -24,8 +27,16 @@ pub fn apply_1q_strided(amps: &mut[Complex64], t_stride: usize, matrix: &SquareM
 ///
 /// `c_stride` and `t_stride` must identify valid control and target qubit
 /// strides within `amps`.
-#[cfg_attr(feature = "trace", tracing::instrument(skip(amps), name = "2 Qubit Gate (Strided)"))]
-pub fn apply_c2q_strided(amps: &mut[Complex64], c_stride: usize, t_stride: usize, matrix: &SquareMatrix) {
+#[cfg_attr(
+    feature = "trace",
+    tracing::instrument(skip(amps), name = "2 Qubit Gate (Strided)")
+)]
+pub fn apply_c2q_strided(
+    amps: &mut [Complex64],
+    c_stride: usize,
+    t_stride: usize,
+    matrix: &SquareMatrix,
+) {
     if c_stride < t_stride {
         // Target is more significant, so select T=0 blocks before C=1 blocks.
         for t_block in (0..amps.len()).step_by(2 * t_stride) {
@@ -58,7 +69,7 @@ pub fn apply_c2q_strided(amps: &mut[Complex64], c_stride: usize, t_stride: usize
 /// Applies `matrix` to the amplitude pair beginning at `index_low`.
 ///
 /// The paired amplitude is located at `index_low + t_stride`.
-fn apply_pair(amps: &mut[Complex64], index_low: usize, t_stride: usize, matrix: &SquareMatrix) {
+fn apply_pair(amps: &mut [Complex64], index_low: usize, t_stride: usize, matrix: &SquareMatrix) {
     let index_high = index_low + t_stride;
     let input = [amps[index_low], amps[index_high]];
     let mut output = [Complex64::ZERO; 2];
@@ -88,8 +99,11 @@ fn apply_pair(amps: &mut[Complex64], index_low: usize, t_stride: usize, matrix: 
 /// `t_stride` must identify a valid target-qubit stride within `amps`.
 #[allow(dead_code)]
 #[deprecated = "retained for reference, use apply_1q_strided"]
-#[cfg_attr(feature = "trace", tracing::instrument(skip(amps), name = "1 Qubit Gate (Kronecker)"))]
-pub fn apply_1q_kronecker(amps: &mut[Complex64], t_stride: usize, matrix: &SquareMatrix) {
+#[cfg_attr(
+    feature = "trace",
+    tracing::instrument(skip(amps), name = "1 Qubit Gate (Kronecker)")
+)]
+pub fn apply_1q_kronecker(amps: &mut [Complex64], t_stride: usize, matrix: &SquareMatrix) {
     let num_amps = amps.len();
 
     debug_assert!(
@@ -119,8 +133,7 @@ pub fn apply_1q_kronecker(amps: &mut[Complex64], t_stride: usize, matrix: &Squar
     // `matrix` acts on the target qubit, with identity on every other qubit.
 
     let matrix_fn = |i: usize| {
-        if target_qubit == i { matrix }
-        else { &identity }
+        if target_qubit == i { matrix } else { &identity }
     };
 
     let mut system_matrix = matrix_fn(0).clone();
@@ -146,8 +159,16 @@ pub fn apply_1q_kronecker(amps: &mut[Complex64], t_stride: usize, matrix: &Squar
 /// target-qubit strides within `amps`.
 #[allow(dead_code)]
 #[deprecated = "retained for reference, use apply_c2q_strided"]
-#[cfg_attr(feature = "trace", tracing::instrument(skip(amps), name = "2 Qubit Gate (Kronecker)"))]
-pub fn apply_c2q_kronecker(amps: &mut[Complex64], c_stride: usize, t_stride: usize, matrix: &SquareMatrix) {
+#[cfg_attr(
+    feature = "trace",
+    tracing::instrument(skip(amps), name = "2 Qubit Gate (Kronecker)")
+)]
+pub fn apply_c2q_kronecker(
+    amps: &mut [Complex64],
+    c_stride: usize,
+    t_stride: usize,
+    matrix: &SquareMatrix,
+) {
     let num_amps = amps.len();
 
     debug_assert!(
@@ -193,14 +214,17 @@ pub fn apply_c2q_kronecker(amps: &mut[Complex64], c_stride: usize, t_stride: usi
     // and identity elsewhere.
 
     let m0_fn = |i: usize| {
-        if control_qubit == i { &p0 }
-        else { &identity }
+        if control_qubit == i { &p0 } else { &identity }
     };
 
-    let m1_fn = |i: usize| { 
-        if control_qubit == i { &p1 }
-        else if target_qubit == i { matrix }
-        else { &identity }
+    let m1_fn = |i: usize| {
+        if control_qubit == i {
+            &p1
+        } else if target_qubit == i {
+            matrix
+        } else {
+            &identity
+        }
     };
 
     let mut m0 = m0_fn(0).clone();
@@ -229,7 +253,7 @@ pub fn apply_c2q_kronecker(amps: &mut[Complex64], c_stride: usize, t_stride: usi
 fn kronecker_product(a: &SquareMatrix, b: &SquareMatrix) -> SquareMatrix {
     let a_size = a.size();
     let b_size = b.size();
-    
+
     let mut result = SquareMatrix::zero(a_size * b_size);
 
     for i in 0..a_size {
@@ -259,9 +283,7 @@ mod tests {
     fn assert_amps_eq(actual: &[Complex64], expected: &[Complex64]) {
         assert_eq!(actual.len(), expected.len());
 
-        for (index, (actual, expected)) in
-            actual.iter().zip(expected).enumerate()
-        {
+        for (index, (actual, expected)) in actual.iter().zip(expected).enumerate() {
             let difference = (*actual - *expected).norm();
 
             assert!(
@@ -284,10 +306,7 @@ mod tests {
 
         apply_pair(&mut amps, 0, 2, &matrix::x());
 
-        assert_amps_eq(
-            &amps,
-            &real_amps(&[0.0, 0.0, 1.0, 0.0]),
-        );
+        assert_amps_eq(&amps, &real_amps(&[0.0, 0.0, 1.0, 0.0]));
     }
 
     #[test]
@@ -296,23 +315,16 @@ mod tests {
 
         apply_1q_strided(&mut amps, 1, &matrix::x());
 
-        assert_amps_eq(
-            &amps,
-            &real_amps(&[2.0, 1.0, 4.0, 3.0]),
-        );
+        assert_amps_eq(&amps, &real_amps(&[2.0, 1.0, 4.0, 3.0]));
     }
 
     #[test]
     fn strided_1q_larger_stride() {
-        let mut amps =
-            real_amps(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
+        let mut amps = real_amps(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
 
         apply_1q_strided(&mut amps, 2, &matrix::x());
 
-        assert_amps_eq(
-            &amps,
-            &real_amps(&[3.0, 4.0, 1.0, 2.0, 7.0, 8.0, 5.0, 6.0]),
-        );
+        assert_amps_eq(&amps, &real_amps(&[3.0, 4.0, 1.0, 2.0, 7.0, 8.0, 5.0, 6.0]));
     }
 
     #[test]
@@ -321,10 +333,7 @@ mod tests {
 
         apply_c2q_strided(&mut amps, 2, 1, &matrix::x());
 
-        assert_amps_eq(
-            &amps,
-            &real_amps(&[1.0, 2.0, 4.0, 3.0]),
-        );
+        assert_amps_eq(&amps, &real_amps(&[1.0, 2.0, 4.0, 3.0]));
     }
 
     #[test]
@@ -333,10 +342,7 @@ mod tests {
 
         apply_c2q_strided(&mut amps, 1, 2, &matrix::x());
 
-        assert_amps_eq(
-            &amps,
-            &real_amps(&[1.0, 4.0, 3.0, 2.0]),
-        );
+        assert_amps_eq(&amps, &real_amps(&[1.0, 4.0, 3.0, 2.0]));
     }
 
     #[test]
@@ -345,13 +351,7 @@ mod tests {
 
         apply_1q_strided(&mut amps, 1, &matrix::y());
 
-        assert_amps_eq(
-            &amps,
-            &[
-                Complex64::ZERO,
-                Complex64::new(0.0, 1.0),
-            ],
-        );
+        assert_amps_eq(&amps, &[Complex64::ZERO, Complex64::new(0.0, 1.0)]);
     }
 
     #[test]
@@ -372,24 +372,17 @@ mod tests {
 
         apply_1q_kronecker(&mut amps, 1, &matrix::x());
 
-        assert_amps_eq(
-            &amps,
-            &real_amps(&[2.0, 1.0, 4.0, 3.0]),
-        );
+        assert_amps_eq(&amps, &real_amps(&[2.0, 1.0, 4.0, 3.0]));
     }
 
     #[test]
     #[allow(deprecated)]
     fn kronecker_1q_larger_stride() {
-        let mut amps =
-            real_amps(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
+        let mut amps = real_amps(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
 
         apply_1q_kronecker(&mut amps, 2, &matrix::x());
 
-        assert_amps_eq(
-            &amps,
-            &real_amps(&[3.0, 4.0, 1.0, 2.0, 7.0, 8.0, 5.0, 6.0]),
-        );
+        assert_amps_eq(&amps, &real_amps(&[3.0, 4.0, 1.0, 2.0, 7.0, 8.0, 5.0, 6.0]));
     }
 
     #[test]
@@ -399,10 +392,7 @@ mod tests {
 
         apply_c2q_kronecker(&mut amps, 2, 1, &matrix::x());
 
-        assert_amps_eq(
-            &amps,
-            &real_amps(&[1.0, 2.0, 4.0, 3.0]),
-        );
+        assert_amps_eq(&amps, &real_amps(&[1.0, 2.0, 4.0, 3.0]));
     }
 
     #[test]
@@ -412,9 +402,6 @@ mod tests {
 
         apply_c2q_kronecker(&mut amps, 1, 2, &matrix::x());
 
-        assert_amps_eq(
-            &amps,
-            &real_amps(&[1.0, 4.0, 3.0, 2.0]),
-        );
+        assert_amps_eq(&amps, &real_amps(&[1.0, 4.0, 3.0, 2.0]));
     }
 }

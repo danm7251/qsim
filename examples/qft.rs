@@ -1,11 +1,10 @@
 use std::f64::consts::PI;
 
 #[cfg(feature = "trace")]
-#[path ="../src/trace.rs"]
+#[path = "../src/trace.rs"]
 mod trace;
 
 use qsim::{api::Instruction, statevector::Statevector};
-
 
 /// AN implementation of the 3-qubit Quantum Fourier Transform (QFT).
 /// The QFT is the quantum analogue of the Discrete Fourier Transform (DFT), the DFT takes a sequence of numbers,
@@ -50,16 +49,29 @@ fn construct_qft(n: usize) -> Vec<Instruction> {
         circuit.push(Instruction::H { q: i });
         // For every superior qubit the target qubit has
         for j in (i + 1)..n {
-            circuit.push(Instruction::CRP { q_c: j, q_t: i, phi: PI / (1 << (j - i)) as f64 });
+            circuit.push(Instruction::CRP {
+                q_c: j,
+                q_t: i,
+                phi: PI / (1 << (j - i)) as f64,
+            });
         }
     }
 
     // Construct SWAP gates from CNOTs
     for i in 0..(n / 2) {
         let swap_qubit = n - i - 1;
-        circuit.push(Instruction::CNOT { q_c: i, q_t: swap_qubit });
-        circuit.push(Instruction::CNOT { q_c: swap_qubit, q_t: i });
-        circuit.push(Instruction::CNOT { q_c: i, q_t: swap_qubit });
+        circuit.push(Instruction::CNOT {
+            q_c: i,
+            q_t: swap_qubit,
+        });
+        circuit.push(Instruction::CNOT {
+            q_c: swap_qubit,
+            q_t: i,
+        });
+        circuit.push(Instruction::CNOT {
+            q_c: i,
+            q_t: swap_qubit,
+        });
     }
 
     circuit

@@ -18,5 +18,5 @@ pub enum SimError {
     FmaUnsupported,
 
     #[error("config is unsupported")]
-    UnsupportedConfig
+    UnsupportedConfig,
 }

@@ -17,5 +17,5 @@ pub enum Instruction {
     SWAP { q_1: usize, q_2: usize },
 
     // Subroutines
-    QFT
+    QFT,
 }

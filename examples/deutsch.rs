@@ -1,5 +1,5 @@
 #[cfg(feature = "trace")]
-#[path ="../src/trace.rs"]
+#[path = "../src/trace.rs"]
 mod trace;
 
 use qsim::{api::Instruction, statevector::Statevector};
@@ -20,12 +20,12 @@ fn main() {
     let f = deutsch_function(n);
     // Run it through the Deutsch algorithm
     let outcome = deutsch_algorithm(&f);
-    
+
     if outcome {
-        assert!(n==2 || n==3);
+        assert!(n == 2 || n == 3);
         println!("f{} is balanced!", n);
     } else {
-        assert!(n==1 || n==4);
+        assert!(n == 1 || n == 4);
         println!("f{} is constant!", n);
     }
 }
@@ -33,9 +33,15 @@ fn main() {
 fn deutsch_algorithm(f: &Vec<Instruction>) -> bool {
     // Setup initial state
     let mut state = Statevector::zero(2).unwrap();
-    state.execute(Instruction::X { q: 1 }).expect("Failed to apply Instruction::X to target=1");
-    state.execute(Instruction::H { q: 0 }).expect("Failed to apply Instruction::H to target=0");
-    state.execute(Instruction::H { q: 1 }).expect("Failed to apply Instruction::H to target=1");
+    state
+        .execute(Instruction::X { q: 1 })
+        .expect("Failed to apply Instruction::X to target=1");
+    state
+        .execute(Instruction::H { q: 0 })
+        .expect("Failed to apply Instruction::H to target=0");
+    state
+        .execute(Instruction::H { q: 1 })
+        .expect("Failed to apply Instruction::H to target=1");
 
     // Apply Deutsch function
     for &g in f {
@@ -43,7 +49,9 @@ fn deutsch_algorithm(f: &Vec<Instruction>) -> bool {
     }
 
     // Transform and measure result
-    state.execute(Instruction::H { q: 0 }).expect("Failed to apply Instruction::H to target=0");
+    state
+        .execute(Instruction::H { q: 0 })
+        .expect("Failed to apply Instruction::H to target=0");
     state.measure(0).unwrap()
 }
 
@@ -54,9 +62,12 @@ fn deutsch_function(n: u8) -> Vec<Instruction> {
         // f2(a) = a
         2 => vec![Instruction::CNOT { q_c: 0, q_t: 1 }],
         // f3(a) = !a
-        3 => vec![Instruction::CNOT { q_c: 0, q_t: 1 }, Instruction::X { q: 1 }],
+        3 => vec![
+            Instruction::CNOT { q_c: 0, q_t: 1 },
+            Instruction::X { q: 1 },
+        ],
         // f4(a) = 1
         4 => vec![Instruction::X { q: 1 }],
-        _ => panic!("Invalid option, please pick f1(), f2(), f3() or f4()")
+        _ => panic!("Invalid option, please pick f1(), f2(), f3() or f4()"),
     }
 }

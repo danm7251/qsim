@@ -33,7 +33,12 @@ pub enum AvxVariant {
 // Benchmarking entry point. Can select based on `AvxVariant`.
 #[cfg(feature = "bench")]
 #[target_feature(enable = "avx")]
-pub unsafe fn apply_1q_with_variant(amps: &mut[Complex64], t_stride: usize, matrix: &SquareMatrix, variant: AvxVariant) {
+pub unsafe fn apply_1q_with_variant(
+    amps: &mut [Complex64],
+    t_stride: usize,
+    matrix: &SquareMatrix,
+    variant: AvxVariant,
+) {
     match variant {
         AvxVariant::Scalar => {
             apply_1q_scalar(amps, t_stride, matrix);
@@ -51,7 +56,7 @@ pub unsafe fn apply_1q_with_variant(amps: &mut[Complex64], t_stride: usize, matr
 
 #[cfg(feature = "bench")]
 #[target_feature(enable = "avx")]
-fn apply_1q_scalar(amps: &mut[Complex64], t_stride: usize, matrix: &SquareMatrix) {
+fn apply_1q_scalar(amps: &mut [Complex64], t_stride: usize, matrix: &SquareMatrix) {
     for offset in (0..amps.len()).step_by(2 * t_stride) {
         for index_low in offset..offset + t_stride {
             apply_pair_scalar(amps, index_low, t_stride, matrix);
@@ -61,7 +66,12 @@ fn apply_1q_scalar(amps: &mut[Complex64], t_stride: usize, matrix: &SquareMatrix
 
 #[cfg(feature = "bench")]
 #[target_feature(enable = "avx")]
-fn apply_pair_scalar(amps: &mut[Complex64], index_low: usize, t_stride: usize, matrix: &SquareMatrix) {
+fn apply_pair_scalar(
+    amps: &mut [Complex64],
+    index_low: usize,
+    t_stride: usize,
+    matrix: &SquareMatrix,
+) {
     let index_high = index_low + t_stride;
     let input = [amps[index_low], amps[index_high]];
     let mut output = [Complex64::ZERO; 2];
@@ -124,7 +134,7 @@ impl SplattedMatrix {
 }
 
 #[target_feature(enable = "avx")]
-pub fn apply_1q_portable(amps: &mut[Complex64], t_stride: usize, matrix: &SquareMatrix) {
+pub fn apply_1q_portable(amps: &mut [Complex64], t_stride: usize, matrix: &SquareMatrix) {
     debug_assert!(t_stride >= 2);
     debug_assert_eq!(t_stride % 2, 0);
 
@@ -140,7 +150,13 @@ pub fn apply_1q_portable(amps: &mut[Complex64], t_stride: usize, matrix: &Square
 }
 
 #[target_feature(enable = "avx")]
-fn apply_pair_portable(amps: &mut[Complex64], index_low: usize, t_stride: usize, matrix: &SplattedMatrix, signs: F64x4) {
+fn apply_pair_portable(
+    amps: &mut [Complex64],
+    index_low: usize,
+    t_stride: usize,
+    matrix: &SplattedMatrix,
+    signs: F64x4,
+) {
     let index_high = index_low + t_stride;
 
     let low_inputs = Simd::from_array([
@@ -164,7 +180,7 @@ fn apply_pair_portable(amps: &mut[Complex64], index_low: usize, t_stride: usize,
     let temp1 = mul_complex_portable(low_inputs, matrix.m10_re, matrix.m10_im, signs);
     let temp2 = mul_complex_portable(high_inputs, matrix.m11_re, matrix.m11_im, signs);
     let high_outputs = temp1 + temp2;
-    
+
     let low_outputs = low_outputs.to_array();
     let high_outputs = high_outputs.to_array();
 

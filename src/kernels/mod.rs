@@ -4,17 +4,14 @@ pub(crate) mod portable;
 
 // Allows benchmarking experimental AVX kernels.
 #[cfg(feature = "bench")]
-pub use avx::{
-    apply_1q_with_variant as apply_1q_avx_with_variant,
-    AvxVariant,
-};
+pub use avx::{AvxVariant, apply_1q_with_variant as apply_1q_avx_with_variant};
 
 // Allows benchmarking the generic kernel directly.
 //#[cfg(feature = "bench")]
-#[allow(deprecated)]
-pub use portable::{apply_1q_strided, apply_1q_kronecker, apply_c2q_strided, apply_c2q_kronecker};
-pub use fma::apply_1q as apply_1q_fma;
 pub use avx::apply_1q as apply_1q_avx;
+pub use fma::apply_1q as apply_1q_fma;
+#[allow(deprecated)]
+pub use portable::{apply_1q_kronecker, apply_1q_strided, apply_c2q_kronecker, apply_c2q_strided};
 
 #[cfg(test)]
 mod tests {
@@ -55,9 +52,7 @@ mod tests {
             avx::apply_1q(&mut actual, 2, &matrix);
         }
 
-        for (index, (actual, expected)) in
-            actual.iter().zip(expected.iter()).enumerate()
-        {
+        for (index, (actual, expected)) in actual.iter().zip(expected.iter()).enumerate() {
             let difference = (*actual - *expected).norm();
 
             assert!(

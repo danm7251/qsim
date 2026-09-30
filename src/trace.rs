@@ -5,7 +5,10 @@ use std::{env, fs};
 
 use chrono::Utc;
 use tracing_chrome::ChromeLayerBuilder;
-use tracing_subscriber::{fmt::{self, format::FmtSpan}, prelude::*};
+use tracing_subscriber::{
+    fmt::{self, format::FmtSpan},
+    prelude::*,
+};
 
 // The directory path to the output.
 const OUTPUT_PATH: &'static str = "target/traces";
@@ -24,8 +27,7 @@ pub fn init_tracing() -> impl Drop {
         .include_args(true)
         .build();
 
-    let stdout_layer = fmt::layer()
-        .with_span_events(FmtSpan::CLOSE);
+    let stdout_layer = fmt::layer().with_span_events(FmtSpan::CLOSE);
 
     tracing_subscriber::registry()
         .with(chrome_layer)
@@ -50,7 +52,5 @@ fn generate_filename(output_path: &str) -> String {
 
     let timestamp = Utc::now().format("%m-%d_%H-%M-%S");
 
-    format!(
-        "{output_path}/{binary_name}_trace_{timestamp}.json"
-    )
+    format!("{output_path}/{binary_name}_trace_{timestamp}.json")
 }

@@ -7,17 +7,19 @@ use dhat::Profiler;
 use ndarray::{Array1, Array2};
 use num_complex::Complex;
 
+use qsim::stabilizer::Stabilizer;
 #[allow(deprecated)]
 use qsim::{
     api::Instruction,
     kernels::{apply_1q_kronecker, apply_1q_strided, apply_c2q_kronecker, apply_c2q_strided},
-    legacy::{LegacyState, gates::Gate},
     linalg::{SquareMatrix, Vector, linear_map, matrix},
-    statevector::Statevector
+    statevector::Statevector,
 };
 
 mod common;
-use common::{target_to_stride, zero_amplitudes, construct_qft_for_current, construct_qft_for_legacy};
+use common::{
+    construct_qft, target_to_stride, zero_amplitudes,
+};
 
 #[global_allocator]
 static ALLOC: dhat::Alloc = dhat::Alloc;
@@ -65,38 +67,36 @@ fn main() {
 /// Constructs the DHAT benchmark groups and cases.
 fn benchmarks() -> Vec<BenchGroup> {
     // Non-parameterised benchmark groups.
-    let mut benches = vec![
-        BenchGroup {
-            name: "Matrix Vector Multiply Size 2",
-            active: false,
-            cases: vec![
-                {
-                    let qsim_vector = Vector::zeros(2);
-                    let qsim_matrix = SquareMatrix::zero(2);
+    let mut benches = vec![BenchGroup {
+        name: "Matrix Vector Multiply Size 2",
+        active: false,
+        cases: vec![
+            {
+                let qsim_vector = Vector::zeros(2);
+                let qsim_matrix = SquareMatrix::zero(2);
 
-                    BenchCase {
-                        name: "qsim".into(),
-                        bench: Box::new(move || {
-                            let res = linear_map(&qsim_matrix, &qsim_vector);
-                            black_box(res);
-                        }),
-                    }
-                },
-                {
-                    let ndarray_vector = Array1::<Complex<f64>>::zeros(2);
-                    let ndarray_matrix = Array2::<Complex<f64>>::zeros((2, 2));
+                BenchCase {
+                    name: "qsim".into(),
+                    bench: Box::new(move || {
+                        let res = linear_map(&qsim_matrix, &qsim_vector);
+                        black_box(res);
+                    }),
+                }
+            },
+            {
+                let ndarray_vector = Array1::<Complex<f64>>::zeros(2);
+                let ndarray_matrix = Array2::<Complex<f64>>::zeros((2, 2));
 
-                    BenchCase {
-                        name: "ndarray".into(),
-                        bench: Box::new(move || {
-                            let res = ndarray_matrix.dot(&ndarray_vector);
-                            black_box(res);
-                        }),
-                    }
-                },
-            ],
-        }
-    ];
+                BenchCase {
+                    name: "ndarray".into(),
+                    bench: Box::new(move || {
+                        let res = ndarray_matrix.dot(&ndarray_vector);
+                        black_box(res);
+                    }),
+                }
+            },
+        ],
+    }];
 
     // Parameterised benchmark groups.
 
@@ -117,9 +117,9 @@ fn benchmarks() -> Vec<BenchGroup> {
                     apply_1q_kronecker(
                         black_box(&mut amplitudes),
                         black_box(stride),
-                        black_box(&matrix)
+                        black_box(&matrix),
                     );
-                })
+                }),
             }
         });
 
@@ -133,21 +133,20 @@ fn benchmarks() -> Vec<BenchGroup> {
                     apply_1q_strided(
                         black_box(&mut amplitudes),
                         black_box(stride),
-                        black_box(&matrix)
+                        black_box(&matrix),
                     );
-                })
+                }),
             }
         });
     }
 
-    benches.push(
-        BenchGroup {
-            name: "Hadamard Gate Performance: Kronecker Expansion and Direct Indexing",
-            active: true,
-            cases,
-        }
-    );
+    benches.push(BenchGroup {
+        name: "Hadamard Gate Performance: Kronecker Expansion and Direct Indexing",
+        active: true,
+        cases,
+    });
 
+    
     let circuit_sizes = (3..14).step_by(2);
 
     let mut cases = Vec::<BenchCase>::new();
@@ -167,9 +166,9 @@ fn benchmarks() -> Vec<BenchGroup> {
                         black_box(&mut amplitudes),
                         black_box(c_stride),
                         black_box(t_stride),
-                        black_box(&matrix)
+                        black_box(&matrix),
                     );
-                })
+                }),
             }
         });
 
@@ -184,71 +183,59 @@ fn benchmarks() -> Vec<BenchGroup> {
                         black_box(&mut amplitudes),
                         black_box(c_stride),
                         black_box(t_stride),
-                        black_box(&matrix)
+                        black_box(&matrix),
                     );
-                })
+                }),
             }
         });
     }
 
-    benches.push(
-        BenchGroup {
-            name: "CNOT(CX) Gate Performance: Kronecker Expansion and Direct Indexing",
-            active: true,
-            cases,
-        }
-    );
+    benches.push(BenchGroup {
+        name: "CNOT(CX) Gate Performance: Kronecker Expansion and Direct Indexing",
+        active: false,
+        cases,
+    });
 
-    // LEGACY VS CURRENT STATEVECTOR QFT PERFORMANCE
+    // Statevector vs Stabilizer memory performance.
 
-    let parameters: [usize; 8] = [2, 4, 6, 8, 10, 12, 14, 16];
+    let n_range = (3..21).step_by(2);
+    let circuit = vec![
+        Instruction::X { q: 1 },
+        Instruction::CNOT { q_c: 1, q_t: 0 }
+    ];
 
     let mut cases = Vec::<BenchCase>::new();
-    for n in parameters {
+    for n in n_range {
         cases.push({
-            let circuit = construct_qft_for_current(n);
+            let mut state = black_box(Statevector::zero(n).unwrap());
+            let circuit = circuit.clone();
 
             BenchCase {
-                name: format!("current-{n}"),
-                bench: Box::new(move || current_qft_execution(n, circuit)),
+                name: format!("Statevector-clifford-{n}"),
+                bench: Box::new(move || {
+                    state.execute_all(black_box(&circuit)).unwrap();
+                }),
             }
         });
 
         cases.push({
-            let circuit = construct_qft_for_legacy(n);
+            let mut state = black_box(Stabilizer::zero(n).unwrap());
+            let circuit = circuit.clone();
 
             BenchCase {
-                name: format!("legacy-{n}"),
-                bench: Box::new(move || legacy_qft_execution(n, circuit)),
-            }
+                name: format!("Stabiliser-clifford-{n}"),
+                bench: Box::new(move || {
+                    state.execute_all(black_box(&circuit)).unwrap();
+                }),
+            }           
         });
     }
 
-    benches.push(
-        BenchGroup {
-            name: "QFT Statevector Performance",
-            active: false,
-            cases,
-        }
-    );
+    benches.push(BenchGroup {
+        name: "Clifford circuit Statevector vs Stabilizer",
+        active: true,
+        cases,
+    });
 
     benches
-}
-
-// Helpers
-
-/// Executes a QFT circuit using the current statevector implementation.
-fn current_qft_execution(n: usize, circuit: Vec<Instruction>) {
-    let mut state = black_box(State::zero(n).unwrap());
-    for i in circuit {
-        state.execute(i).unwrap();
-    }
-}
-
-/// Executes a QFT circuit using the legacy statevector implementation.
-fn legacy_qft_execution(n: usize, circuit: Vec<Gate>) {
-    let mut state = black_box(LegacyState::zero(n).unwrap());
-    for g in circuit {
-        state.apply_gate(g).unwrap();
-    }
 }

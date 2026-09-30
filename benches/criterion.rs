@@ -3,29 +3,27 @@
 
 use std::{hint::black_box, time::Duration};
 
-use criterion::{AxisScale, BenchmarkId, Criterion, PlotConfiguration, criterion_group, criterion_main};
-use ndarray::{array, Array1, Array2};
+use criterion::{
+    AxisScale, BenchmarkId, Criterion, PlotConfiguration, criterion_group, criterion_main,
+};
+use ndarray::{Array1, Array2, array};
 use num_complex::Complex;
-use qsim::kernels::{apply_1q_avx, apply_1q_fma};
-use rand::{rng, RngExt};
+use qsim::{api::Instruction, kernels::{apply_1q_avx, apply_1q_fma}};
+use rand::{RngExt, rng};
 
 #[allow(deprecated)]
 use qsim::{
-    kernels::{AvxVariant, apply_1q_avx_with_variant, apply_1q_strided, apply_1q_kronecker, apply_c2q_strided, apply_c2q_kronecker},
-    legacy::{LegacyState, gates::Gate},
+    kernels::{
+        AvxVariant, apply_1q_avx_with_variant, apply_1q_kronecker, apply_1q_strided,
+        apply_c2q_kronecker, apply_c2q_strided,
+    },
     linalg::{SquareMatrix, Vector, linear_map, matrix},
+    stabilizer::Stabilizer,
     statevector::Statevector,
-    stabilizer::Stabilizer
 };
 
 mod common;
-use common::{
-    target_to_stride,
-    zero_amplitudes,
-    construct_qft_for_current,
-    construct_qft_for_legacy,
-    construct_clifford_circuit
-};
+use common::{construct_clifford_circuit, target_to_stride, zero_amplitudes};
 
 // Active benchmarks.
 criterion_group!(
@@ -40,7 +38,8 @@ criterion_main!(benches);
 // KRONECKER EXPANSION KERNEL VS STANDARD IN-PLACE KERNEL
 
 fn bench_kron_vs_index_on_hadamard_over_qubits(c: &mut Criterion) {
-    let mut group = c.benchmark_group("Hadamard Gate Performance: Kronecker Expansion vs Direct Indexing");
+    let mut group =
+        c.benchmark_group("Hadamard Gate Performance: Kronecker Expansion vs Direct Indexing");
     let config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
     group.plot_config(config);
 
@@ -52,34 +51,26 @@ fn bench_kron_vs_index_on_hadamard_over_qubits(c: &mut Criterion) {
 
         let mut amplitudes = zero_amplitudes(n);
         #[allow(deprecated)]
-        group.bench_with_input(
-            BenchmarkId::new("Kronecker expansion", n),
-            &n,
-            |b, _| {
-                b.iter(|| {
-                    apply_1q_kronecker(
-                        black_box(&mut amplitudes),
-                        black_box(stride),
-                        black_box(&matrix),
-                    );
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("Kronecker expansion", n), &n, |b, _| {
+            b.iter(|| {
+                apply_1q_kronecker(
+                    black_box(&mut amplitudes),
+                    black_box(stride),
+                    black_box(&matrix),
+                );
+            });
+        });
 
         let mut amplitudes = zero_amplitudes(n);
-        group.bench_with_input(
-            BenchmarkId::new("Direct indexing", n),
-            &n,
-            |b, _| {
-                b.iter(|| {
-                    apply_1q_strided(
-                        black_box(&mut amplitudes),
-                        black_box(stride),
-                        black_box(&matrix),
-                    );
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("Direct indexing", n), &n, |b, _| {
+            b.iter(|| {
+                apply_1q_strided(
+                    black_box(&mut amplitudes),
+                    black_box(stride),
+                    black_box(&matrix),
+                );
+            });
+        });
     }
 
     group.finish();
@@ -87,7 +78,8 @@ fn bench_kron_vs_index_on_hadamard_over_qubits(c: &mut Criterion) {
 
 /// Benchmarks CNOT(CX) application by providing C2Q kernels with an X matrix.
 fn bench_kron_vs_index_on_cnot_over_qubits(c: &mut Criterion) {
-    let mut group = c.benchmark_group("CNOT Gate Performance: Kronecker Expansion vs Direct Indexing");
+    let mut group =
+        c.benchmark_group("CNOT Gate Performance: Kronecker Expansion vs Direct Indexing");
     let config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
     group.plot_config(config);
 
@@ -100,36 +92,28 @@ fn bench_kron_vs_index_on_cnot_over_qubits(c: &mut Criterion) {
 
         let mut amplitudes = zero_amplitudes(n);
         #[allow(deprecated)]
-        group.bench_with_input(
-            BenchmarkId::new("Kronecker expansion", n),
-            &n,
-            |b, _| {
-                b.iter(|| {
-                    apply_c2q_kronecker(
-                        black_box(&mut amplitudes),
-                        black_box(c_stride),
-                        black_box(t_stride),
-                        black_box(&matrix),
-                    );
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("Kronecker expansion", n), &n, |b, _| {
+            b.iter(|| {
+                apply_c2q_kronecker(
+                    black_box(&mut amplitudes),
+                    black_box(c_stride),
+                    black_box(t_stride),
+                    black_box(&matrix),
+                );
+            });
+        });
 
         let mut amplitudes = zero_amplitudes(n);
-        group.bench_with_input(
-            BenchmarkId::new("Direct indexing", n),
-            &n,
-            |b, _| {
-                b.iter(|| {
-                    apply_c2q_strided(
-                        black_box(&mut amplitudes),
-                        black_box(c_stride),
-                        black_box(t_stride),
-                        black_box(&matrix),
-                    );
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("Direct indexing", n), &n, |b, _| {
+            b.iter(|| {
+                apply_c2q_strided(
+                    black_box(&mut amplitudes),
+                    black_box(c_stride),
+                    black_box(t_stride),
+                    black_box(&matrix),
+                );
+            });
+        });
     }
 
     group.finish();
@@ -153,52 +137,40 @@ fn bench_portable_vs_fma_vs_avx_on_hadamard_over_qubits(c: &mut Criterion) {
         let matrix = matrix::h();
 
         let mut amplitudes = zero_amplitudes(n);
-        group.bench_with_input(
-            BenchmarkId::new("Portable", n),
-            &n,
-            |b, _| {
+        group.bench_with_input(BenchmarkId::new("Portable", n), &n, |b, _| {
+            b.iter(|| {
+                apply_1q_strided(
+                    black_box(&mut amplitudes),
+                    black_box(stride),
+                    black_box(&matrix),
+                );
+            });
+        });
+
+        let mut amplitudes = zero_amplitudes(n);
+        unsafe {
+            group.bench_with_input(BenchmarkId::new("FMA", n), &n, |b, _| {
                 b.iter(|| {
-                    apply_1q_strided(
+                    apply_1q_fma(
                         black_box(&mut amplitudes),
                         black_box(stride),
                         black_box(&matrix),
                     );
                 });
-            },
-        );
-
-        let mut amplitudes = zero_amplitudes(n);
-        unsafe {
-            group.bench_with_input(
-                BenchmarkId::new("FMA", n),
-                &n,
-                |b, _| {
-                    b.iter(|| {
-                        apply_1q_fma(
-                            black_box(&mut amplitudes),
-                            black_box(stride),
-                            black_box(&matrix),
-                        );
-                    });
-                },
-            );
+            });
         }
 
         let mut amplitudes = zero_amplitudes(n);
         unsafe {
-            group.bench_with_input(
-                BenchmarkId::new("AVX", n),
-                &n,
-                |b, _| {
-                    b.iter(|| {
-                        apply_1q_avx(
-                            black_box(&mut amplitudes),
-                            black_box(stride),
-                            black_box(&matrix),
-                        );
-                    });
-                },
-            );
+            group.bench_with_input(BenchmarkId::new("AVX", n), &n, |b, _| {
+                b.iter(|| {
+                    apply_1q_avx(
+                        black_box(&mut amplitudes),
+                        black_box(stride),
+                        black_box(&matrix),
+                    );
+                });
+            });
         }
     }
 
@@ -210,7 +182,8 @@ fn bench_portable_vs_fma_vs_avx_on_hadamard_over_targets(c: &mut Criterion) {
         panic!("FMA and AVX unsupported on host machine!");
     }
 
-    let mut group = c.benchmark_group("Hadamard Gate Performance over T at 17: Portable vs FMA vs AVX");
+    let mut group =
+        c.benchmark_group("Hadamard Gate Performance over T at 17: Portable vs FMA vs AVX");
     let n = 17;
 
     for t in 0..n {
@@ -218,53 +191,41 @@ fn bench_portable_vs_fma_vs_avx_on_hadamard_over_targets(c: &mut Criterion) {
         let matrix = matrix::h();
 
         let mut amplitudes = zero_amplitudes(n);
-        group.bench_with_input(
-            BenchmarkId::new("Portable", t),
-            &t,
-            |b, _| {
+        group.bench_with_input(BenchmarkId::new("Portable", t), &t, |b, _| {
+            b.iter(|| {
+                apply_1q_strided(
+                    black_box(&mut amplitudes),
+                    black_box(stride),
+                    black_box(&matrix),
+                );
+            });
+        });
+
+        let mut amplitudes = zero_amplitudes(n);
+        unsafe {
+            group.bench_with_input(BenchmarkId::new("FMA", t), &t, |b, _| {
                 b.iter(|| {
-                    apply_1q_strided(
+                    apply_1q_fma(
                         black_box(&mut amplitudes),
                         black_box(stride),
                         black_box(&matrix),
                     );
                 });
-            },
-        );
-
-        let mut amplitudes = zero_amplitudes(n);
-        unsafe {
-            group.bench_with_input(
-                BenchmarkId::new("FMA", t),
-                &t,
-                |b, _| {
-                    b.iter(|| {
-                        apply_1q_fma(
-                            black_box(&mut amplitudes),
-                            black_box(stride),
-                            black_box(&matrix),
-                        );
-                    });
-                },
-            );
+            });
         }
 
         if stride > 1 {
             let mut amplitudes = zero_amplitudes(n);
             unsafe {
-                group.bench_with_input(
-                    BenchmarkId::new("AVX", t),
-                    &t,
-                    |b, _| {
-                        b.iter(|| {
-                            apply_1q_avx(
-                                black_box(&mut amplitudes),
-                                black_box(stride),
-                                black_box(&matrix),
-                            );
-                        });
-                    },
-                );
+                group.bench_with_input(BenchmarkId::new("AVX", t), &t, |b, _| {
+                    b.iter(|| {
+                        apply_1q_avx(
+                            black_box(&mut amplitudes),
+                            black_box(stride),
+                            black_box(&matrix),
+                        );
+                    });
+                });
             }
         }
     }
@@ -275,51 +236,33 @@ fn bench_portable_vs_fma_vs_avx_on_hadamard_over_targets(c: &mut Criterion) {
 // STATEVECTOR VS STABILIZER REPRESENTATIONS
 
 fn bench_statevector_vs_stabilizer_over_qubits(c: &mut Criterion) {
-    let mut group = c.benchmark_group(
-        "Clifford Circuit Performance: Statevector vs Stabilizer"
-    );
+    let mut group = c.benchmark_group("Clifford Circuit Performance: Statevector vs Stabilizer");
 
-    let config = PlotConfiguration::default()
-        .summary_scale(AxisScale::Logarithmic);
+    let config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
 
     group.plot_config(config);
 
-    let circuit_sizes = (3..21).step_by(2);
+    let n_range = (3..21).step_by(2);
+    let circuit = vec![
+        Instruction::X { q: 1 },
+        Instruction::CNOT { q_c: 1, q_t: 0 }
+    ];
 
-    for n in circuit_sizes {
-        let circuit = construct_clifford_circuit(n, 10);
+    for n in n_range {
 
-        group.bench_with_input(
-            BenchmarkId::new("Statevector", n),
-            &n,
-            |b, &n| {
-                b.iter(|| {
-                    let mut state = State::zero(n).unwrap();
+        let mut state = black_box(Statevector::zero(n).unwrap());
+        group.bench_with_input(BenchmarkId::new("Statevector", n), &n, |b, &_n| {
+            b.iter(|| {
+                state.execute_all(black_box(&circuit)).unwrap();
+            });
+        });
 
-                    for &instruction in &circuit {
-                        state.execute(black_box(instruction)).unwrap();
-                    }
-
-                    black_box(state);
-                });
-            },
-        );
-
-        group.bench_with_input(
-            BenchmarkId::new("Stabilizer", n),
-            &n,
-            |b, &n| {
-                b.iter(|| {
-                    let mut state = Stabilizer::zero(n).unwrap();
-
-                    for &instruction in &circuit {
-                        state.execute(black_box(instruction)).unwrap();
-                    }
-
-                    black_box(state);
-                });
-            },
-        );
+        let mut state = black_box(Stabilizer::zero(n).unwrap());
+        group.bench_with_input(BenchmarkId::new("Stabilizer", n), &n, |b, &_n| {
+            b.iter(|| {
+                state.execute_all(black_box(&circuit)).unwrap();
+            });
+        });
     }
 
     group.finish();
@@ -331,7 +274,7 @@ fn bench_statevector_vs_stabilizer_over_qubits(c: &mut Criterion) {
 
 // STANDARD IN-PLACE KERNEL VS PARALLEL KERNEL
 
-// STANDARD IN-PLACE KERNEL VS STABILIZER BACKEND 
+// STANDARD IN-PLACE KERNEL VS STABILIZER BACKEND
 
 // KERNEL COMPARISONS
 
@@ -345,29 +288,21 @@ fn bench_generic_vs_avx_over_targets(c: &mut Criterion) {
     let gate = matrix::y();
 
     // The final target has stride 1, which the SIMD kernel cannot process.
-    let targets = [
-        0,
-        n / 2,
-        n - 2,
-    ];
+    let targets = [0, n / 2, n - 2];
 
     for target in targets {
         let stride = 1 << (n - target - 1);
         let mut amplitudes = zero_amplitudes(n);
 
-        group.bench_with_input(
-            BenchmarkId::new("generic", target),
-            &target,
-            |b, _| {
-                b.iter(|| {
-                    apply_1q_strided(
-                        black_box(&mut amplitudes),
-                        black_box(stride),
-                        black_box(&gate),
-                    );
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("generic", target), &target, |b, _| {
+            b.iter(|| {
+                apply_1q_strided(
+                    black_box(&mut amplitudes),
+                    black_box(stride),
+                    black_box(&gate),
+                );
+            });
+        });
 
         let variants = [
             ("avx-scalar", AvxVariant::Scalar),
@@ -377,20 +312,16 @@ fn bench_generic_vs_avx_over_targets(c: &mut Criterion) {
         for (name, variant) in variants {
             let mut amplitudes = zero_amplitudes(n);
 
-            group.bench_with_input(
-                BenchmarkId::new(name, target),
-                &target,
-                |b, _| {
-                    b.iter(|| unsafe {
-                        apply_1q_avx_with_variant(
-                            black_box(&mut amplitudes),
-                            black_box(stride),
-                            black_box(&gate),
-                            variant,
-                        );
-                    });
-                },
-            );
+            group.bench_with_input(BenchmarkId::new(name, target), &target, |b, _| {
+                b.iter(|| unsafe {
+                    apply_1q_avx_with_variant(
+                        black_box(&mut amplitudes),
+                        black_box(stride),
+                        black_box(&gate),
+                        variant,
+                    );
+                });
+            });
         }
     }
 
@@ -411,19 +342,15 @@ fn bench_generic_vs_avx_over_n(c: &mut Criterion) {
         let stride = 1 << (n - target - 1);
         let mut amplitudes = zero_amplitudes(n);
 
-        group.bench_with_input(
-            BenchmarkId::new("generic", n),
-            &n,
-            |b, _| {
-                b.iter(|| {
-                    apply_1q_strided(
-                        black_box(&mut amplitudes),
-                        black_box(stride),
-                        black_box(&gate),
-                    );
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("generic", n), &n, |b, _| {
+            b.iter(|| {
+                apply_1q_strided(
+                    black_box(&mut amplitudes),
+                    black_box(stride),
+                    black_box(&gate),
+                );
+            });
+        });
 
         let variants = [
             ("avx-scalar", AvxVariant::Scalar),
@@ -433,74 +360,17 @@ fn bench_generic_vs_avx_over_n(c: &mut Criterion) {
         for (name, variant) in variants {
             let mut amplitudes = zero_amplitudes(n);
 
-            group.bench_with_input(
-                BenchmarkId::new(name, n),
-                &n,
-                |b, _| {
-                    b.iter(|| unsafe {
-                        apply_1q_avx_with_variant(
-                            black_box(&mut amplitudes),
-                            black_box(stride),
-                            black_box(&gate),
-                            variant,
-                        );
-                    });
-                },
-            );
+            group.bench_with_input(BenchmarkId::new(name, n), &n, |b, _| {
+                b.iter(|| unsafe {
+                    apply_1q_avx_with_variant(
+                        black_box(&mut amplitudes),
+                        black_box(stride),
+                        black_box(&gate),
+                        variant,
+                    );
+                });
+            });
         }
-    }
-
-    group.finish();
-}
-
-/// Compares the index and Kronecker-product implementations of a
-/// single-qubit gate across different target qubits.
-#[allow(deprecated, unused)]
-fn bench_1q_kernels_index_vs_kronecker(c: &mut Criterion) {
-    let mut group = c.benchmark_group("1Q Index vs Kronecker");
-    group.measurement_time(Duration::from_secs(8));
-
-    let n = 8;
-
-    for target in 0..n {
-        let gate = Gate::H { target };
-
-        let mut state = LegacyState::zero(n).unwrap();
-        group.bench_with_input(BenchmarkId::new("Index", target), &target, |b, target| {
-            b.iter(|| state.apply_1q_index(*target, gate.matrix()))
-        });
-
-        let mut state = LegacyState::zero(n).unwrap();
-        group.bench_with_input(
-            BenchmarkId::new("Kronecker", target),
-            &target,
-            |b, target| b.iter(|| state.apply_1q_kron(*target, gate.matrix())),
-        );
-    }
-
-    group.finish();
-}
-
-/// Benchmarks the 1-qubit index kernel at the first, middle, and last
-/// target qubits of a circuit.
-#[allow(unused)]
-fn bench_1q_index_kernel_over_target(c: &mut Criterion) {
-    let mut group = c.benchmark_group("1Q Index Kernel by Target");
-
-    let n = 7;
-    let targets = [
-        0,
-        n / 2,
-        n - 1
-    ];
-
-    for target in targets {
-        let gate = Gate::H { target };
-
-        let mut state = LegacyState::zero(n).unwrap();
-        group.bench_with_input(BenchmarkId::new("Target", target), &target, |b, target| {
-            b.iter(|| state.apply_1q_index(*target, gate.matrix()))
-        });
     }
 
     group.finish();
@@ -515,16 +385,7 @@ fn bench_matrix_zero_initialisation(c: &mut Criterion) {
     let mut group = c.benchmark_group("Matrix Zero Initialisation");
 
     // Sizes of N x N matrices.
-    let sizes = [
-        2,
-        4,
-        8,
-        16,
-        32,
-        64,
-        128,
-        256
-    ];
+    let sizes = [2, 4, 8, 16, 32, 64, 128, 256];
 
     for size in sizes {
         group.bench_with_input(BenchmarkId::new("qsim", size), &size, |b, &size| {
@@ -547,17 +408,7 @@ fn bench_vector_zero_initialisation(c: &mut Criterion) {
 
     // Vector sizes.
     let sizes = [
-        1,
-        4,
-        16,
-        64,
-        256,
-        1_024,
-        4_096,
-        16_384,
-        65_536,
-        262_144,
-        1_048_576,
+        1, 4, 16, 64, 256, 1_024, 4_096, 16_384, 65_536, 262_144, 1_048_576,
     ];
 
     for size in sizes {
@@ -582,12 +433,7 @@ fn bench_matrix_sequential_traversal(c: &mut Criterion) {
 
     // Matrix dimensions and traversal counts.
     // Each configuration performs 1,048,576 element reads.
-    let parameters = [
-        (16, 4_096),
-        (32, 1_024),
-        (64, 256),
-        (128, 64)
-    ];
+    let parameters = [(16, 4_096), (32, 1_024), (64, 256), (128, 64)];
 
     for (size, traversals) in parameters {
         let qsim_matrix = SquareMatrix::zero(size);
@@ -697,12 +543,7 @@ fn bench_matrix_random_access(c: &mut Criterion) {
 
     // Matrix sizes and number of random reads.
     // Each configuration performs 1,048,576 element reads.
-    let parameters = [
-        (16, 4096),
-        (32, 1024),
-        (64, 256),
-        (128, 64)
-    ];
+    let parameters = [(16, 4096), (32, 1024), (64, 256), (128, 64)];
 
     for (size, num_accesses) in parameters {
         let qsim_matrix = SquareMatrix::zero(size);
@@ -858,8 +699,14 @@ fn bench_matrix_construction(c: &mut Criterion) {
 
     let size = 2;
     let values = [
-        [Complex::<f64>::new(0.1, 0.25), Complex::<f64>::new(0.15, 0.5)],
-        [Complex::<f64>::new(-0.5, 0.26), Complex::<f64>::new(0.101, 1.5)],
+        [
+            Complex::<f64>::new(0.1, 0.25),
+            Complex::<f64>::new(0.15, 0.5),
+        ],
+        [
+            Complex::<f64>::new(-0.5, 0.26),
+            Complex::<f64>::new(0.101, 1.5),
+        ],
     ];
 
     group.bench_with_input(BenchmarkId::new("qsim/zero + fill", size), &size, |b, _| {
@@ -898,49 +745,18 @@ fn bench_matrix_construction(c: &mut Criterion) {
     group.bench_with_input(BenchmarkId::new("ndarray/array!", size), &size, |b, _| {
         b.iter(|| {
             let res = array![
-                [Complex::<f64>::new(0.1, 0.25), Complex::<f64>::new(0.15, 0.5)],
-                [Complex::<f64>::new(-0.5, 0.26), Complex::<f64>::new(0.101, 1.5)]
+                [
+                    Complex::<f64>::new(0.1, 0.25),
+                    Complex::<f64>::new(0.15, 0.5)
+                ],
+                [
+                    Complex::<f64>::new(-0.5, 0.26),
+                    Complex::<f64>::new(0.101, 1.5)
+                ]
             ];
             black_box(res);
         })
     });
-
-    group.finish();
-}
-
-/// Benchmarks the existing `state` implementation against the new
-/// `new_state` implementation by executing equivalent QFT circuits
-/// at different qubit counts.
-#[allow(unused)]
-fn bench_legacy_vs_current_state_with_qft(c: &mut Criterion) {
-    let mut group = c.benchmark_group("QFT Statevector Performance");
-    group.measurement_time(Duration::from_secs(30));
-
-    // Size of benchmark
-    let parameters: [usize; 10] = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20];
-
-    for n in parameters {
-        let legacy_circuit = construct_qft_for_legacy(n);
-        let current_circuit = construct_qft_for_current(n);
-
-        group.bench_with_input(BenchmarkId::new("legacy", n), &n, |b, _| {
-            b.iter(|| {
-                let mut state = black_box(LegacyState::zero(n).unwrap());
-                for g in &legacy_circuit {
-                    state.apply_gate(*g).unwrap();
-                }
-            })
-        });
-
-        group.bench_with_input(BenchmarkId::new("current", n), &n, |b, _| {
-            b.iter(|| {
-                let mut state = black_box(State::zero(n).unwrap());
-                for i in &current_circuit {
-                    state.execute(*i).unwrap();
-                }
-            })
-        });
-    }
 
     group.finish();
 }

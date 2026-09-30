@@ -14,7 +14,6 @@ pub struct Stabilizer {
 }
 
 impl Stabilizer {
-
     // Constructors
 
     /// Creates the `|0...0⟩` state for `num_qubits` qubits.
@@ -69,29 +68,37 @@ impl Stabilizer {
     pub fn execute(&mut self, cmd: Instruction) -> Result<(), SimError> {
         match cmd {
             // One Qubit Gates
-
             Instruction::X { q } => self.apply_x(q),
             Instruction::Y { q } => self.apply_y(q),
             Instruction::Z { q } => self.apply_z(q),
             Instruction::H { q } => self.apply_h(q),
 
-            Instruction::S { .. }
-            | Instruction::T { .. }
-            | Instruction::P { .. } => return Err(SimError::UnsupportedInstruction),
+            Instruction::S { .. } | Instruction::T { .. } | Instruction::P { .. } => {
+                return Err(SimError::UnsupportedInstruction);
+            }
 
             // Controlled One Qubit Gates
-
             Instruction::CNOT { q_c, q_t } => self.apply_cnot(q_c, q_t),
             Instruction::CRP { .. } => return Err(SimError::UnsupportedInstruction),
 
             // Two Qubit Gates
-
             Instruction::SWAP { .. } => return Err(SimError::UnsupportedInstruction),
 
             // Subroutines
-
             Instruction::QFT => return Err(SimError::UnsupportedInstruction),
         }
+    }
+
+    /// Applies an collection of [`Instruction`]s to the state, updating its amplitudes as required.
+    ///
+    /// Returns an error if an instruction references an invalid qubit or otherwise
+    /// cannot be applied to the state.
+    pub fn execute_all(&mut self, circuit: &[Instruction]) -> Result<(), SimError> {
+        for &cmd in circuit {
+            self.execute(cmd)?;
+        }
+
+        Ok(())
     }
 
     fn apply_x(&mut self, target: usize) -> Result<(), SimError> {

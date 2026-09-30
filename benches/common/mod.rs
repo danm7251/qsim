@@ -2,7 +2,7 @@ use std::f64::consts::PI;
 
 use num_complex::Complex;
 
-use qsim::{api::Instruction, legacy::gates::Gate};
+use qsim::api::Instruction;
 
 pub fn target_to_stride(n: usize, t: usize) -> usize {
     assert!(t < n, "target qubit out of range");
@@ -11,50 +11,13 @@ pub fn target_to_stride(n: usize, t: usize) -> usize {
 }
 
 pub fn zero_amplitudes(n: usize) -> Vec<Complex<f64>> {
-    let mut amplitudes =
-        vec![Complex::new(0.0, 0.0); 1 << n];
+    let mut amplitudes = vec![Complex::new(0.0, 0.0); 1 << n];
 
     amplitudes[0] = Complex::new(1.0, 0.0);
     amplitudes
 }
 
-pub fn construct_qft_for_legacy(n: usize) -> Vec<Gate> {
-    let mut circuit = Vec::<Gate>::new();
-
-    // For each qubit in the circuit
-    for i in 0..n {
-        circuit.push(Gate::H { target: i });
-        // For every superior qubit the target qubit has
-        for j in (i + 1)..n {
-            circuit.push(Gate::CRP {
-                control: j,
-                target: i,
-                phi: PI / (1 << (j - i)) as f64,
-            });
-        }
-    }
-
-    // Construct SWAP gates from CNOTs
-    for i in 0..(n / 2) {
-        let swap_qubit = n - i - 1;
-        circuit.push(Gate::CNOT {
-            control: i,
-            target: swap_qubit,
-        });
-        circuit.push(Gate::CNOT {
-            control: swap_qubit,
-            target: i,
-        });
-        circuit.push(Gate::CNOT {
-            control: i,
-            target: swap_qubit,
-        });
-    }
-
-    circuit
-}
-
-pub fn construct_qft_for_current(n: usize) -> Vec<Instruction> {
+pub fn construct_qft(n: usize) -> Vec<Instruction> {
     let mut circuit = Vec::<Instruction>::new();
 
     // For each qubit in the circuit
@@ -101,12 +64,7 @@ pub fn construct_clifford_circuit(num_qubits: usize, depth: usize) -> Vec<Instru
 
         // Nearest-neighbour CNOT layer.
         for q in 0..num_qubits - 1 {
-            circuit.push(
-                Instruction::CNOT {
-                    q_c: q,
-                    q_t: q + 1,
-                }
-            );
+            circuit.push(Instruction::CNOT { q_c: q, q_t: q + 1 });
         }
     }
 

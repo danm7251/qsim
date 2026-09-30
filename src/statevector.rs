@@ -2,7 +2,10 @@ use num_complex::Complex64;
 use rand::random;
 
 use crate::{
-    api::Instruction::{self, *}, error::SimError, kernels, linalg::{SquareMatrix, Vector, matrix}
+    api::Instruction::{self, *},
+    error::SimError,
+    kernels,
+    linalg::{SquareMatrix, Vector, matrix},
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -29,7 +32,10 @@ impl Statevector {
     /// # Errors
     ///
     /// Returns an error if `num_qubits` is `0`.
-    #[cfg_attr(feature = "trace", tracing::instrument(name = "Zero State Construction", err))]
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(name = "Zero State Construction", err)
+    )]
     pub fn zero(num_qubits: usize) -> Result<Self, SimError> {
         // Validation.
         if num_qubits == 0 {
@@ -60,7 +66,10 @@ impl Statevector {
     /// Returns an error if:
     /// - `num_qubits` is `0`.
     /// - host CPU does not support `config` values.
-    #[cfg_attr(feature = "trace", tracing::instrument(name = "Zero State Construction", err))]
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(name = "Zero State Construction", err)
+    )]
     pub fn zero_with_config(num_qubits: usize, config: Config) -> Result<Self, SimError> {
         // Validation.
         if num_qubits == 0 {
@@ -191,7 +200,7 @@ impl Statevector {
 
         // Convert the target qubit into its state-vector stride.
         let stride = 1 << (num_q - target - 1);
-        
+
         let config = self.config;
         let amplitudes = self.amplitudes.as_mut_slice();
 
@@ -199,11 +208,13 @@ impl Statevector {
         match (config.avx, config.fma) {
             (false, false) => kernels::portable::apply_1q_strided(amplitudes, stride, matrix),
             (false, true) => unsafe { kernels::fma::apply_1q(amplitudes, stride, matrix) },
-            (true, false) => if stride > 1 {
-                unsafe { kernels::avx::apply_1q(amplitudes, stride, matrix) }
-            } else {
-                kernels::portable::apply_1q_strided(amplitudes, stride, matrix);
-            },
+            (true, false) => {
+                if stride > 1 {
+                    unsafe { kernels::avx::apply_1q(amplitudes, stride, matrix) }
+                } else {
+                    kernels::portable::apply_1q_strided(amplitudes, stride, matrix);
+                }
+            }
             _ => return Err(SimError::UnsupportedConfig),
         }
 
@@ -221,7 +232,12 @@ impl Statevector {
     /// Returns an error if either qubit does not exist or if `control` and `target`
     /// identify the same qubit.
     #[cfg_attr(feature = "bench", visibility::make(pub))]
-    fn apply_c2q(&mut self, control: usize, target: usize, matrix: &SquareMatrix) -> Result<(), SimError> {
+    fn apply_c2q(
+        &mut self,
+        control: usize,
+        target: usize,
+        matrix: &SquareMatrix,
+    ) -> Result<(), SimError> {
         if control >= self.n || target >= self.n {
             return Err(SimError::InvalidQubit);
         }
@@ -237,8 +253,12 @@ impl Statevector {
         let amplitudes = self.amplitudes.as_mut_slice();
 
         match (config.avx, config.fma) {
-            (false, false) => kernels::portable::apply_c2q_strided(amplitudes, c_stride, t_stride, matrix),
-            (false, true) => unsafe { kernels::fma::apply_c2q(amplitudes, c_stride, t_stride, matrix) },
+            (false, false) => {
+                kernels::portable::apply_c2q_strided(amplitudes, c_stride, t_stride, matrix)
+            }
+            (false, true) => unsafe {
+                kernels::fma::apply_c2q(amplitudes, c_stride, t_stride, matrix)
+            },
             _ => unimplemented!("AVX and FMA are unimplemented!"),
         }
 
@@ -249,7 +269,7 @@ impl Statevector {
 
     /// Measures `target` in the computational basis and collapses the state to
     /// the resulting measurement outcome.
-    /// 
+    ///
     /// Returns `true` if qubit is `|1⟩`.
     pub fn measure(&mut self, target: usize) -> Result<bool, SimError> {
         if target >= self.n {
@@ -294,7 +314,7 @@ impl Statevector {
 
 #[cfg(test)]
 mod test {
-    use std::f64::consts::{PI, FRAC_1_SQRT_2};
+    use std::f64::consts::{FRAC_1_SQRT_2, PI};
 
     use crate::linalg::C64;
 
@@ -304,7 +324,7 @@ mod test {
     fn strided_x() {
         let mut state = Statevector::zero(2).unwrap();
         state.apply_1q(0, &matrix::h()).unwrap();
-        
+
         let amps = state.amplitudes();
         let expected = Vector::from_elements([
             C64(FRAC_1_SQRT_2, 0.0),
@@ -350,60 +370,47 @@ mod test {
             name: &'static str,
             circuit_size: usize,
             instructions: Vec<Instruction>,
-            outcome: Vec<Complex64>
+            outcome: Vec<Complex64>,
         }
 
         let cases: Vec<TestCase> = vec![
             TestCase {
                 name: "bell state phi plus",
                 circuit_size: 2,
-                instructions: vec![
-                    H { q: 0 },
-                    CNOT { q_c: 0, q_t: 1 }
-                ],
+                instructions: vec![H { q: 0 }, CNOT { q_c: 0, q_t: 1 }],
                 outcome: vec![
                     C64(FRAC_1_SQRT_2, 0.0),
                     C64(0.0, 0.0),
                     C64(0.0, 0.0),
-                    C64(FRAC_1_SQRT_2, 0.0)
-                ]
+                    C64(FRAC_1_SQRT_2, 0.0),
+                ],
             },
             TestCase {
                 name: "reversible",
                 circuit_size: 2,
-                instructions: vec![
-                    H { q: 0 },
-                    CNOT { q_c: 0, q_t: 1 },
-                    CNOT { q_c: 0, q_t: 1 }
-                ],
+                instructions: vec![H { q: 0 }, CNOT { q_c: 0, q_t: 1 }, CNOT { q_c: 0, q_t: 1 }],
                 outcome: vec![
                     C64(FRAC_1_SQRT_2, 0.0),
                     C64(0.0, 0.0),
                     C64(FRAC_1_SQRT_2, 0.0),
-                    C64(0.0, 0.0)
-                ]
+                    C64(0.0, 0.0),
+                ],
             },
             TestCase {
                 name: "bell state phi plus from other side",
                 circuit_size: 2,
-                instructions: vec![
-                    H { q: 1 },
-                    CNOT { q_c: 1, q_t: 0 }
-                ],
+                instructions: vec![H { q: 1 }, CNOT { q_c: 1, q_t: 0 }],
                 outcome: vec![
                     C64(FRAC_1_SQRT_2, 0.0),
                     C64(0.0, 0.0),
                     C64(0.0, 0.0),
-                    C64(FRAC_1_SQRT_2, 0.0)
-                ]
+                    C64(FRAC_1_SQRT_2, 0.0),
+                ],
             },
             TestCase {
                 name: "3 qubits",
                 circuit_size: 3,
-                instructions: vec![
-                    H { q: 0 },
-                    CNOT { q_c: 0, q_t: 2 }
-                ],
+                instructions: vec![H { q: 0 }, CNOT { q_c: 0, q_t: 2 }],
                 outcome: vec![
                     C64(FRAC_1_SQRT_2, 0.0),
                     C64(0.0, 0.0),
@@ -412,9 +419,9 @@ mod test {
                     C64(0.0, 0.0),
                     C64(FRAC_1_SQRT_2, 0.0),
                     C64(0.0, 0.0),
-                    C64(0.0, 0.0)
-                ]
-            }
+                    C64(0.0, 0.0),
+                ],
+            },
         ];
 
         for case in cases {
@@ -423,7 +430,11 @@ mod test {
                 state.execute(g).expect("Failed to apply Gate");
             }
             for (i, amp) in state.amplitudes().iter().enumerate() {
-                assert_eq!(amp, &case.outcome[i], "Failed on amplitude {i} in test case \"{}\"", case.name);
+                assert_eq!(
+                    amp, &case.outcome[i],
+                    "Failed on amplitude {i} in test case \"{}\"",
+                    case.name
+                );
             }
         }
     }
@@ -434,7 +445,7 @@ mod test {
             name: &'static str,
             circuit_size: usize,
             instructions: Vec<Instruction>,
-            outcome: Vec<Complex64>
+            outcome: Vec<Complex64>,
         }
 
         let cases: Vec<TestCase> = vec![
@@ -443,28 +454,36 @@ mod test {
                 circuit_size: 2,
                 instructions: vec![
                     X { q: 1 },
-                    CRP { q_c: 0, q_t: 1, phi: PI }
+                    CRP {
+                        q_c: 0,
+                        q_t: 1,
+                        phi: PI,
+                    },
                 ],
                 outcome: vec![
                     C64(0.0, 0.0), // |00>
                     C64(1.0, 0.0), // |01> State must remain entirely unaltered because Control is 0
                     C64(0.0, 0.0), // |10>
-                    C64(0.0, 0.0)  // |11>
-                ]
+                    C64(0.0, 0.0), // |11>
+                ],
             },
             TestCase {
                 name: "VERIFY_CRP_GATE_ACTS_AS_IDENTITY_NO_OP_WHEN_CONTROL_QUBIT_IS_ONE_AND_TARGET_QUBIT_IS_ZERO",
                 circuit_size: 2,
                 instructions: vec![
                     X { q: 0 },
-                    CRP { q_c: 0, q_t: 1, phi: PI }
+                    CRP {
+                        q_c: 0,
+                        q_t: 1,
+                        phi: PI,
+                    },
                 ],
                 outcome: vec![
                     C64(0.0, 0.0), // |00>
                     C64(0.0, 0.0), // |01>
                     C64(1.0, 0.0), // |10> State must remain entirely unaltered because Target is 0
-                    C64(0.0, 0.0)  // |11>
-                ]
+                    C64(0.0, 0.0), // |11>
+                ],
             },
         ];
 
@@ -474,7 +493,11 @@ mod test {
                 state.execute(g).expect("Failed to apply Gate");
             }
             for (i, amp) in state.amplitudes().iter().enumerate() {
-                assert_eq!(amp, &case.outcome[i], "Failed on amplitude {i} in test case \"{}\"", case.name);
+                assert_eq!(
+                    amp, &case.outcome[i],
+                    "Failed on amplitude {i} in test case \"{}\"",
+                    case.name
+                );
             }
         }
     }
