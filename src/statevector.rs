@@ -238,31 +238,33 @@ impl Statevector {
         target: usize,
         matrix: &SquareMatrix,
     ) -> Result<(), SimError> {
-        if control >= self.n || target >= self.n {
-            return Err(SimError::InvalidQubit);
-        }
-        if control == target {
-            return Err(SimError::InvalidQubit);
-        }
-
-        // Convert the control and target qubits into state-vector strides
-        let c_stride = 1 << (self.n - control - 1);
-        let t_stride = 1 << (self.n - target - 1);
-
-        let config = self.config;
-        let amplitudes = self.amplitudes.as_mut_slice();
-
-        match (config.avx, config.fma) {
-            (false, false) => {
-                kernels::portable::apply_c2q_strided(amplitudes, c_stride, t_stride, matrix)
+            if control >= self.n || target >= self.n {
+                return Err(SimError::InvalidQubit);
             }
-            (false, true) => unsafe {
-                kernels::fma::apply_c2q(amplitudes, c_stride, t_stride, matrix)
-            },
-            _ => unimplemented!("AVX and FMA are unimplemented!"),
-        }
+            if control == target {
+                return Err(SimError::InvalidQubit);
+            }
 
-        Ok(())
+            // Convert the control and target qubits into state-vector strides
+            let c_stride = 1 << (self.n - control - 1);
+            let t_stride = 1 << (self.n - target - 1);
+
+            let config = self.config;
+            let amplitudes = self.amplitudes.as_mut_slice();
+
+            match (config.avx, config.fma) {
+                (false, false) => {
+                    kernels::portable::apply_c2q_strided(amplitudes, c_stride, t_stride, matrix)
+                }
+                // SAFETY: FMA support was verified when the state was constructed.
+                (false, true) => unsafe {
+                    kernels::fma::apply_c2q(amplitudes, c_stride, t_stride, matrix)
+                },
+                _ => return Err(SimError::UnsupportedConfig),
+            }
+
+            Ok(())
+        }
     }
 
     // Operations

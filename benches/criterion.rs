@@ -1,3 +1,10 @@
+//! Criterion benchmarks for qsim.
+//!
+//! Run with `cargo bench --features bench`.
+//!
+//! Results are saved under `target/criterion/`. Open
+//! `target/criterion/report/index.html` for the full report.
+
 // Only compiles if the `bench` feature is enabled since otherwise many qsim functions are private.
 #![cfg(feature = "bench")]
 
@@ -8,14 +15,14 @@ use criterion::{
 };
 use ndarray::{Array1, Array2, array};
 use num_complex::Complex;
-use qsim::{api::Instruction, kernels::{apply_1q_avx, apply_1q_fma}};
 use rand::{RngExt, rng};
 
 #[allow(deprecated)]
 use qsim::{
+    api::Instruction,
     kernels::{
         AvxVariant, apply_1q_avx_with_variant, apply_1q_kronecker, apply_1q_strided,
-        apply_c2q_kronecker, apply_c2q_strided,
+        apply_c2q_kronecker, apply_c2q_strided, apply_1q_avx, apply_1q_fma
     },
     linalg::{SquareMatrix, Vector, linear_map, matrix},
     stabilizer::Stabilizer,
@@ -23,19 +30,23 @@ use qsim::{
 };
 
 mod common;
-use common::{construct_clifford_circuit, target_to_stride, zero_amplitudes};
+use common::{target_to_stride, zero_amplitudes};
 
 // Active benchmarks.
 criterion_group!(
     benches,
-    bench_portable_vs_fma_vs_avx_on_hadamard_over_targets
+    bench_kron_vs_index_on_hadamard_over_qubits,
+    bench_kron_vs_index_on_cnot_over_qubits,
+    bench_portable_vs_fma_vs_avx_on_hadamard_over_qubits,
+    bench_portable_vs_fma_vs_avx_on_hadamard_over_targets,
+    bench_statevector_vs_stabilizer_over_qubits
 );
 
 criterion_main!(benches);
 
 // MAIN RESULTS
 
-// KRONECKER EXPANSION KERNEL VS STANDARD IN-PLACE KERNEL
+// HADAMARD: FULL-SYSTEM MATRIX KERNEL VS PORTABLE DPM KERNEL
 
 fn bench_kron_vs_index_on_hadamard_over_qubits(c: &mut Criterion) {
     let mut group =
@@ -76,7 +87,8 @@ fn bench_kron_vs_index_on_hadamard_over_qubits(c: &mut Criterion) {
     group.finish();
 }
 
-/// Benchmarks CNOT(CX) application by providing C2Q kernels with an X matrix.
+// CNOT: FULL-SYSTEM MATRIX KERNEL VS PORTABLE DPM KERNEL
+
 fn bench_kron_vs_index_on_cnot_over_qubits(c: &mut Criterion) {
     let mut group =
         c.benchmark_group("CNOT Gate Performance: Kronecker Expansion vs Direct Indexing");
@@ -119,7 +131,7 @@ fn bench_kron_vs_index_on_cnot_over_qubits(c: &mut Criterion) {
     group.finish();
 }
 
-// STANDARD IN-PLACE KERNEL VS FMA ENABLED KERNEL VS AVX ENABLED KERNEL
+// HADAMARD OVER NUMBER OF QUBITS: PORTABLE DPM KERNEL VS FMA DPM KERNEL VS AVX DPM KERNEL
 
 fn bench_portable_vs_fma_vs_avx_on_hadamard_over_qubits(c: &mut Criterion) {
     if !is_x86_feature_detected!("fma") || !is_x86_feature_detected!("avx") {
@@ -177,6 +189,8 @@ fn bench_portable_vs_fma_vs_avx_on_hadamard_over_qubits(c: &mut Criterion) {
     group.finish();
 }
 
+// HADAMARD OVER TARGET QUBIT: PORTABLE DPM KERNEL VS FMA DPM KERNEL VS AVX DPM KERNEL
+
 fn bench_portable_vs_fma_vs_avx_on_hadamard_over_targets(c: &mut Criterion) {
     if !is_x86_feature_detected!("fma") || !is_x86_feature_detected!("avx") {
         panic!("FMA and AVX unsupported on host machine!");
@@ -233,7 +247,7 @@ fn bench_portable_vs_fma_vs_avx_on_hadamard_over_targets(c: &mut Criterion) {
     group.finish();
 }
 
-// STATEVECTOR VS STABILIZER REPRESENTATIONS
+// CLIFFORD GATES: STATEVECTOR VS STABILIZER SIMULATORS
 
 fn bench_statevector_vs_stabilizer_over_qubits(c: &mut Criterion) {
     let mut group = c.benchmark_group("Clifford Circuit Performance: Statevector vs Stabilizer");
@@ -268,15 +282,7 @@ fn bench_statevector_vs_stabilizer_over_qubits(c: &mut Criterion) {
     group.finish();
 }
 
-// STANDARD IN-PLACE KERNEL VS AVX2 ENABLED PORTABLE SIMD KERNEL
-
-// STANDARD IN-PLACE KERNEL VS AVX2+FMA ENABLED PORTABLE SIMD KERNEL
-
-// STANDARD IN-PLACE KERNEL VS PARALLEL KERNEL
-
-// STANDARD IN-PLACE KERNEL VS STABILIZER BACKEND
-
-// KERNEL COMPARISONS
+// BENCHMARKS EXCLUDED FROM MAIN RESULTS
 
 /// Compares the generic kernel and AVX variants across target qubits.
 #[allow(unused)]

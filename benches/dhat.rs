@@ -1,3 +1,11 @@
+//! DHAT heap profiling benchmarks for qsim.
+//!
+//! Run with `cargo bench --features bench --bench <name>`.
+//!
+//! Results are saved as JSON files under `target/dhat/<group name>/`, one per
+//! case. Load them in the online DHAT viewer:
+//! <https://nnethercote.github.io/dh_view/dh_view.html>
+
 // Only compiles if the "bench" feature is enabled since otherwise many Qsim functions are private.
 #![cfg(feature = "bench")]
 
@@ -18,7 +26,7 @@ use qsim::{
 
 mod common;
 use common::{
-    construct_qft, target_to_stride, zero_amplitudes,
+    target_to_stride, zero_amplitudes,
 };
 
 #[global_allocator]
@@ -192,7 +200,7 @@ fn benchmarks() -> Vec<BenchGroup> {
 
     benches.push(BenchGroup {
         name: "CNOT(CX) Gate Performance: Kronecker Expansion and Direct Indexing",
-        active: false,
+        active: true,
         cases,
     });
 
@@ -207,24 +215,24 @@ fn benchmarks() -> Vec<BenchGroup> {
     let mut cases = Vec::<BenchCase>::new();
     for n in n_range {
         cases.push({
-            let mut state = black_box(Statevector::zero(n).unwrap());
             let circuit = circuit.clone();
 
             BenchCase {
                 name: format!("Statevector-clifford-{n}"),
                 bench: Box::new(move || {
+                    let mut state = black_box(Statevector::zero(n).unwrap());
                     state.execute_all(black_box(&circuit)).unwrap();
                 }),
             }
         });
 
         cases.push({
-            let mut state = black_box(Stabilizer::zero(n).unwrap());
             let circuit = circuit.clone();
 
             BenchCase {
                 name: format!("Stabiliser-clifford-{n}"),
                 bench: Box::new(move || {
+                    let mut state = black_box(Stabilizer::zero(n).unwrap());
                     state.execute_all(black_box(&circuit)).unwrap();
                 }),
             }           
