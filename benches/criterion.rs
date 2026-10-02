@@ -15,6 +15,7 @@ use criterion::{
 };
 use ndarray::{Array1, Array2, array};
 use num_complex::Complex;
+use qsim::statevector::Config;
 use rand::{RngExt, rng};
 
 #[allow(deprecated)]
@@ -35,11 +36,7 @@ use common::{target_to_stride, zero_amplitudes};
 // Active benchmarks.
 criterion_group!(
     benches,
-    bench_kron_vs_index_on_hadamard_over_qubits,
-    bench_kron_vs_index_on_cnot_over_qubits,
-    bench_portable_vs_fma_vs_avx_on_hadamard_over_qubits,
-    bench_portable_vs_fma_vs_avx_on_hadamard_over_targets,
-    bench_statevector_vs_stabilizer_over_qubits
+    avx_and_fma_against_avx_over_qubits
 );
 
 criterion_main!(benches);
@@ -47,6 +44,39 @@ criterion_main!(benches);
 // MAIN RESULTS
 
 // HADAMARD: FULL-SYSTEM MATRIX KERNEL VS PORTABLE DPM KERNEL
+
+fn avx_and_fma_against_avx_over_qubits(c: &mut Criterion) {
+    let mut group =
+        c.benchmark_group("AVX+FMA vs AVX Performance");
+    let config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    group.plot_config(config);
+
+    let circuit_sizes = (3..20).step_by(4);
+    let circuit = vec![
+        Instruction::H { q: 1 },
+        Instruction::X { q: 2 },
+    ];
+    
+    for n in circuit_sizes {
+        let config = Config { avx: true, fma: false };
+        let mut state = Statevector::zero_with_config(n, config).unwrap();
+        group.bench_with_input(BenchmarkId::new("AVX only", n), &n, |b, _| {
+            b.iter(|| {
+                state.execute_all(&circuit).unwrap();
+            });
+        });
+
+        let config = Config { avx: true, fma: true };
+        let mut state = Statevector::zero_with_config(n, config).unwrap();
+        group.bench_with_input(BenchmarkId::new("AVX and FMA", n), &n, |b, _| {
+            b.iter(|| {
+                state.execute_all(&circuit).unwrap();
+            });
+        });
+    }
+
+    group.finish();
+}
 
 fn bench_kron_vs_index_on_hadamard_over_qubits(c: &mut Criterion) {
     let mut group =

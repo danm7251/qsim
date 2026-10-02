@@ -48,7 +48,7 @@ impl Statevector {
 
         // Auto Config setup.
         let config = Config {
-            avx: false, //is_x86_feature_detected!("avx"),
+            avx: is_x86_feature_detected!("avx"),
             fma: is_x86_feature_detected!("fma"),
         };
 
@@ -215,7 +215,13 @@ impl Statevector {
                     kernels::portable::apply_1q_strided(amplitudes, stride, matrix);
                 }
             }
-            _ => return Err(SimError::UnsupportedConfig),
+            (true, true) => {
+                if stride > 1 {
+                    unsafe { kernels::avx_fma::apply_1q(amplitudes, stride, matrix) }
+                } else {
+                    kernels::portable::apply_1q_strided(amplitudes, stride, matrix);
+                }
+            }
         }
 
         Ok(())
@@ -232,39 +238,33 @@ impl Statevector {
     /// Returns an error if either qubit does not exist or if `control` and `target`
     /// identify the same qubit.
     #[cfg_attr(feature = "bench", visibility::make(pub))]
-    fn apply_c2q(
-        &mut self,
-        control: usize,
-        target: usize,
-        matrix: &SquareMatrix,
-    ) -> Result<(), SimError> {
-            if control >= self.n || target >= self.n {
-                return Err(SimError::InvalidQubit);
-            }
-            if control == target {
-                return Err(SimError::InvalidQubit);
-            }
-
-            // Convert the control and target qubits into state-vector strides
-            let c_stride = 1 << (self.n - control - 1);
-            let t_stride = 1 << (self.n - target - 1);
-
-            let config = self.config;
-            let amplitudes = self.amplitudes.as_mut_slice();
-
-            match (config.avx, config.fma) {
-                (false, false) => {
-                    kernels::portable::apply_c2q_strided(amplitudes, c_stride, t_stride, matrix)
-                }
-                // SAFETY: FMA support was verified when the state was constructed.
-                (false, true) => unsafe {
-                    kernels::fma::apply_c2q(amplitudes, c_stride, t_stride, matrix)
-                },
-                _ => return Err(SimError::UnsupportedConfig),
-            }
-
-            Ok(())
+    fn apply_c2q(&mut self, control: usize, target: usize, matrix: &SquareMatrix) -> Result<(), SimError> {
+        if control >= self.n || target >= self.n {
+            return Err(SimError::InvalidQubit);
         }
+        if control == target {
+            return Err(SimError::InvalidQubit);
+        }
+
+        // Convert the control and target qubits into state-vector strides
+        let c_stride = 1 << (self.n - control - 1);
+        let t_stride = 1 << (self.n - target - 1);
+
+        let config = self.config;
+        let amplitudes = self.amplitudes.as_mut_slice();
+
+        match (config.avx, config.fma) {
+            (false, false) => {
+                kernels::portable::apply_c2q_strided(amplitudes, c_stride, t_stride, matrix)
+            }
+            // SAFETY: FMA support was verified when the state was constructed.
+            (false, true) => unsafe {
+                kernels::fma::apply_c2q(amplitudes, c_stride, t_stride, matrix)
+            },
+            _ => return Err(SimError::UnsupportedConfig),
+        }
+
+        Ok(())
     }
 
     // Operations

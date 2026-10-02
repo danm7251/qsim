@@ -1,4 +1,5 @@
 pub(crate) mod avx;
+pub(crate) mod avx_fma;
 pub(crate) mod fma;
 pub(crate) mod portable;
 
