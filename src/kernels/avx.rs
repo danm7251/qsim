@@ -114,7 +114,6 @@ pub fn apply_c2q(
     }
 }
 
-
 #[target_feature(enable = "avx")]
 fn apply_pair(
     amps: &mut [Complex64],
@@ -160,7 +159,12 @@ fn apply_pair(
 }
 
 #[target_feature(enable = "avx")]
-fn mul_complex_portable(input: F64x4, re: F64x4, im: F64x4, signs: F64x4) -> F64x4 {
+fn mul_complex_portable(
+    input: F64x4,
+    re: F64x4,
+    im: F64x4,
+    signs: F64x4
+) -> F64x4 {
     let re_products = input * re;
     let im_products = input * im;
 

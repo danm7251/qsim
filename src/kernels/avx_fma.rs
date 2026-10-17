@@ -46,7 +46,7 @@ impl SplattedMatrix {
 }
 
 #[target_feature(enable = "avx,fma")]
-pub unsafe fn apply_1q(amps: &mut [Complex64], t_stride: usize, matrix: &SquareMatrix) {
+pub fn apply_1q(amps: &mut [Complex64], t_stride: usize, matrix: &SquareMatrix) {
     debug_assert!(t_stride >= 2);
     debug_assert_eq!(t_stride % 2, 0);
 
@@ -57,6 +57,57 @@ pub unsafe fn apply_1q(amps: &mut [Complex64], t_stride: usize, matrix: &SquareM
     for offset in (0..amps.len()).step_by(2 * t_stride) {
         for index_low in (offset..offset + t_stride).step_by(2) {
             apply_pair(amps, index_low, t_stride, &matrix, signs);
+        }
+    }
+}
+
+#[target_feature(enable = "avx,fma")]
+pub fn apply_c2q(
+    amps: &mut [Complex64],
+    c_stride: usize,
+    t_stride: usize,
+    matrix: &SquareMatrix,
+) {
+    // Conditions
+    debug_assert!(c_stride >= 2);
+    debug_assert!(t_stride >= 2);
+    debug_assert_eq!(c_stride % 2, 0);
+    debug_assert_eq!(t_stride % 2, 0);
+    debug_assert_ne!(c_stride, t_stride);
+
+    // Invariants
+    let matrix = SplattedMatrix::new(matrix);
+    let signs = F64x4::from_array([-1.0, 1.0, -1.0, 1.0]);
+
+    // Traversal
+    if c_stride < t_stride {
+        // Target is more significant:
+        // select T=0 blocks, then C=1 blocks.
+        for t_block in (0..amps.len()).step_by(2 * t_stride) {
+            let t_is_zero = t_block..(t_block + t_stride);
+
+            for c_block in t_is_zero.clone().step_by(2 * c_stride) {
+                let c_is_one =
+                    (c_block + c_stride)..(c_block + 2 * c_stride);
+
+                for index_low in c_is_one.step_by(2) {
+                    apply_pair(amps, index_low, t_stride, &matrix, signs);
+                }
+            }
+        }
+    } else {
+        // Control is more significant:
+        // select C=1 blocks, then T=0 blocks.
+        for c_block in (c_stride..amps.len()).step_by(2 * c_stride) {
+            let c_is_one = c_block..(c_block + c_stride);
+
+            for t_block in c_is_one.step_by(2 * t_stride) {
+                let t_is_zero = t_block..(t_block + t_stride);
+
+                for index_low in t_is_zero.step_by(2) {
+                    apply_pair(amps, index_low, t_stride, &matrix, signs)
+                }
+            }
         }
     }
 }

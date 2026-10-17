@@ -255,13 +255,34 @@ impl Statevector {
 
         match (config.avx, config.fma) {
             (false, false) => {
-                kernels::portable::apply_c2q_strided(amplitudes, c_stride, t_stride, matrix)
+                kernels::portable::apply_c2q_strided(amplitudes, c_stride, t_stride, matrix);
             }
-            // SAFETY: FMA support was verified when the state was constructed.
+            // SAFETY: FMA support was verified when the config was constructed.
             (false, true) => unsafe {
-                kernels::fma::apply_c2q(amplitudes, c_stride, t_stride, matrix)
+                kernels::fma::apply_c2q(amplitudes, c_stride, t_stride, matrix);
             },
-            _ => return Err(SimError::UnsupportedConfig),
+            // SAFETY: AVX support was verified when the config was constructed.
+            (true, false) => {
+                if c_stride == 1 || t_stride == 1 {
+                    kernels::portable::apply_c2q_strided(amplitudes, c_stride, t_stride, matrix);
+                } else {
+                    unsafe {
+                        kernels::avx::apply_c2q(amplitudes, c_stride, t_stride, matrix);
+                    }
+                }
+            },
+            // SAFETY: AVX & FMA support were verified when the config was constructed.
+            (true, true) => {
+                if c_stride == 1 || t_stride == 1 {
+                    unsafe { 
+                        kernels::fma::apply_c2q(amplitudes, c_stride, t_stride, matrix);
+                    }
+                } else {
+                    unsafe {
+                        kernels::avx_fma::apply_c2q(amplitudes, c_stride, t_stride, matrix);
+                    }
+                }
+            }
         }
 
         Ok(())
