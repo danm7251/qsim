@@ -12,7 +12,6 @@
 use std::{fs, hint::black_box};
 
 use dhat::Profiler;
-use ndarray::{Array1, Array2};
 use num_complex::Complex;
 
 use qsim::stabilizer::Stabilizer;
@@ -74,37 +73,7 @@ fn main() {
 
 /// Constructs the DHAT benchmark groups and cases.
 fn benchmarks() -> Vec<BenchGroup> {
-    // Non-parameterised benchmark groups.
-    let mut benches = vec![BenchGroup {
-        name: "Matrix Vector Multiply Size 2",
-        active: false,
-        cases: vec![
-            {
-                let qsim_vector = Vector::zeros(2);
-                let qsim_matrix = SquareMatrix::zero(2);
-
-                BenchCase {
-                    name: "qsim".into(),
-                    bench: Box::new(move || {
-                        let res = linear_map(&qsim_matrix, &qsim_vector);
-                        black_box(res);
-                    }),
-                }
-            },
-            {
-                let ndarray_vector = Array1::<Complex<f64>>::zeros(2);
-                let ndarray_matrix = Array2::<Complex<f64>>::zeros((2, 2));
-
-                BenchCase {
-                    name: "ndarray".into(),
-                    bench: Box::new(move || {
-                        let res = ndarray_matrix.dot(&ndarray_vector);
-                        black_box(res);
-                    }),
-                }
-            },
-        ],
-    }];
+    let mut benches = Vec::new();
 
     // Parameterised benchmark groups.
 
