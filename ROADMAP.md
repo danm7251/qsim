@@ -9,5 +9,6 @@ A rough outline of where the development of `qsim` will go. Subject to change.
 - Create release (CD) workflow.
 
 ## Post-Alpha
+- Shift runtime errors to compile-time.
 - Add gate fusion.
 - Add parallelism.
