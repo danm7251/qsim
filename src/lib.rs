@@ -7,5 +7,4 @@ pub mod api;
 pub mod error;
 pub mod kernels;
 pub mod linalg;
-pub mod stabilizer;
 pub mod statevector;

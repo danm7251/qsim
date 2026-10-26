@@ -34,7 +34,6 @@ use qsim::{
         apply_1q_fma
     },
     linalg::{SquareMatrix, Vector, linear_map, matrix},
-    stabilizer::Stabilizer,
     statevector::Statevector,
 };
 
@@ -280,41 +279,6 @@ fn bench_portable_vs_fma_vs_avx_on_hadamard_over_targets(c: &mut Criterion) {
                 });
             }
         }
-    }
-
-    group.finish();
-}
-
-// CLIFFORD GATES: STATEVECTOR VS STABILIZER SIMULATORS
-
-fn bench_statevector_vs_stabilizer_over_qubits(c: &mut Criterion) {
-    let mut group = c.benchmark_group("Clifford Circuit Performance: Statevector vs Stabilizer");
-
-    let config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-
-    group.plot_config(config);
-
-    let n_range = (3..21).step_by(2);
-    let circuit = vec![
-        Instruction::X { q: 1 },
-        Instruction::CNOT { q_c: 1, q_t: 0 }
-    ];
-
-    for n in n_range {
-
-        let mut state = black_box(Statevector::zero(n).unwrap());
-        group.bench_with_input(BenchmarkId::new("Statevector", n), &n, |b, &_n| {
-            b.iter(|| {
-                state.execute_all(black_box(&circuit)).unwrap();
-            });
-        });
-
-        let mut state = black_box(Stabilizer::zero(n).unwrap());
-        group.bench_with_input(BenchmarkId::new("Stabilizer", n), &n, |b, &_n| {
-            b.iter(|| {
-                state.execute_all(black_box(&circuit)).unwrap();
-            });
-        });
     }
 
     group.finish();
