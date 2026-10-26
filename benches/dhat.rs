@@ -14,7 +14,6 @@ use std::{fs, hint::black_box};
 use dhat::Profiler;
 use num_complex::Complex;
 
-use qsim::stabilizer::Stabilizer;
 #[allow(deprecated)]
 use qsim::{
     api::Instruction,
@@ -169,47 +168,6 @@ fn benchmarks() -> Vec<BenchGroup> {
 
     benches.push(BenchGroup {
         name: "CNOT(CX) Gate Performance: Kronecker Expansion and Direct Indexing",
-        active: true,
-        cases,
-    });
-
-    // Statevector vs Stabilizer memory performance.
-
-    let n_range = (3..21).step_by(2);
-    let circuit = vec![
-        Instruction::X { q: 1 },
-        Instruction::CNOT { q_c: 1, q_t: 0 }
-    ];
-
-    let mut cases = Vec::<BenchCase>::new();
-    for n in n_range {
-        cases.push({
-            let circuit = circuit.clone();
-
-            BenchCase {
-                name: format!("Statevector-clifford-{n}"),
-                bench: Box::new(move || {
-                    let mut state = black_box(Statevector::zero(n).unwrap());
-                    state.execute_all(black_box(&circuit)).unwrap();
-                }),
-            }
-        });
-
-        cases.push({
-            let circuit = circuit.clone();
-
-            BenchCase {
-                name: format!("Stabiliser-clifford-{n}"),
-                bench: Box::new(move || {
-                    let mut state = black_box(Stabilizer::zero(n).unwrap());
-                    state.execute_all(black_box(&circuit)).unwrap();
-                }),
-            }           
-        });
-    }
-
-    benches.push(BenchGroup {
-        name: "Clifford circuit Statevector vs Stabilizer",
         active: true,
         cases,
     });
