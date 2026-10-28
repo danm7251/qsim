@@ -1,3 +1,5 @@
+//! Errors returned by qsim.
+
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq)]
