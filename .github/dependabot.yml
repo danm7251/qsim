@@ -3,7 +3,6 @@ updates:
   - package-ecosystem: "cargo"
     directory: "/"
     schedule:
-    schedule:
       interval: "weekly"
       day: "monday"
       time: "09:00"
@@ -12,6 +11,13 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/London"
+
+  - package-ecosystem: "rust-toolchain"
+    directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
