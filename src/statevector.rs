@@ -122,7 +122,7 @@ impl Statevector {
         let num_q = self.num_qubits();
 
         if target >= num_q {
-            return Err(SimError::InvalidQubit);
+            return Err(SimError::InvalidQubit { index: target, num_qubits: num_q });
         }
 
         let stride = 1 << (num_q - target - 1);
@@ -195,7 +195,7 @@ impl Statevector {
         let num_q = self.n;
 
         if target >= num_q {
-            return Err(SimError::InvalidQubit);
+            return Err(SimError::InvalidQubit { index: target, num_qubits: num_q });
         }
 
         // Convert the target qubit into its state-vector stride.
@@ -240,10 +240,10 @@ impl Statevector {
     #[cfg_attr(feature = "bench", visibility::make(pub))]
     fn apply_c2q(&mut self, control: usize, target: usize, matrix: &SquareMatrix) -> Result<(), SimError> {
         if control >= self.n || target >= self.n {
-            return Err(SimError::InvalidQubit);
+            return Err(SimError::InvalidQubit { index: target, num_qubits: self.n });
         }
         if control == target {
-            return Err(SimError::InvalidQubit);
+            return Err(SimError::InvalidQubit { index: target, num_qubits: self.n });
         }
 
         // Convert the control and target qubits into state-vector strides
@@ -296,7 +296,7 @@ impl Statevector {
     /// Returns `true` if qubit is `|1⟩`.
     pub fn measure(&mut self, target: usize) -> Result<bool, SimError> {
         if target >= self.n {
-            return Err(SimError::InvalidQubit);
+            return Err(SimError::InvalidQubit { index: target, num_qubits: self.n });
         }
 
         let (prob_0, prob_1) = self.probabilities(target)?;

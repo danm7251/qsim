@@ -12,8 +12,11 @@ pub enum SimError {
     #[error("host CPU does not support FMA")]
     FmaUnsupported,
 
-    #[error("qubit index is out of bounds")]
-    InvalidQubit,
+    #[error("qubit index {index} is out of bounds for a {num_qubits}-qubit state")]
+    InvalidQubit {
+        index: usize,
+        num_qubits: usize,
+    },
 
     #[error("instruction is unsupported")]
     UnsupportedInstruction,
