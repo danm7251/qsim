@@ -31,7 +31,7 @@ pub enum Instruction {
     /// Controlled-NOT gate, with control qubit `q_c` and target qubit `q_t`.
     CNOT { q_c: usize, q_t: usize },
 
-    // Controlled phase-shift gate with control qubit `q_c`, target qubit
+    /// Controlled phase-shift gate with control qubit `q_c`, target qubit
     /// `q_t`, and phase angle `phi` in radians.
     CRP { q_c: usize, q_t: usize, phi: f64 },
 
