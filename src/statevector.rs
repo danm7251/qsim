@@ -384,7 +384,7 @@ mod test {
         expected_state: Vec<Complex64>,
     }
 
-    /// Executes each [`CircuitTestCase`]'s circuit on a statevector and
+    /// Executes each [`CircuitCircuitTestCase`]'s circuit on a statevector and
     /// compares the resulting amplitudes against the expected outcome.
     fn run_circuit_test_table(cases: &[CircuitTestCase]) {
         for case in cases {
@@ -461,52 +461,45 @@ mod test {
 
     #[test]
     fn cnot() {
-        struct TestCase {
-            name: &'static str,
-            circuit_size: usize,
-            instructions: Vec<Instruction>,
-            outcome: Vec<Complex64>,
-        }
-
-        let cases: Vec<TestCase> = vec![
-            TestCase {
+        let cases: Vec<CircuitTestCase> = vec![
+            CircuitTestCase {
                 name: "bell state phi plus",
-                circuit_size: 2,
+                num_qubits: 2,
                 instructions: vec![H { q: 0 }, CNOT { q_c: 0, q_t: 1 }],
-                outcome: vec![
+                expected_state: vec![
                     C64(FRAC_1_SQRT_2, 0.0),
                     C64(0.0, 0.0),
                     C64(0.0, 0.0),
                     C64(FRAC_1_SQRT_2, 0.0),
                 ],
             },
-            TestCase {
+            CircuitTestCase {
                 name: "reversible",
-                circuit_size: 2,
+                num_qubits: 2,
                 instructions: vec![H { q: 0 }, CNOT { q_c: 0, q_t: 1 }, CNOT { q_c: 0, q_t: 1 }],
-                outcome: vec![
+                expected_state: vec![
                     C64(FRAC_1_SQRT_2, 0.0),
                     C64(0.0, 0.0),
                     C64(FRAC_1_SQRT_2, 0.0),
                     C64(0.0, 0.0),
                 ],
             },
-            TestCase {
+            CircuitTestCase {
                 name: "bell state phi plus from other side",
-                circuit_size: 2,
+                num_qubits: 2,
                 instructions: vec![H { q: 1 }, CNOT { q_c: 1, q_t: 0 }],
-                outcome: vec![
+                expected_state: vec![
                     C64(FRAC_1_SQRT_2, 0.0),
                     C64(0.0, 0.0),
                     C64(0.0, 0.0),
                     C64(FRAC_1_SQRT_2, 0.0),
                 ],
             },
-            TestCase {
+            CircuitTestCase {
                 name: "3 qubits",
-                circuit_size: 3,
+                num_qubits: 3,
                 instructions: vec![H { q: 0 }, CNOT { q_c: 0, q_t: 2 }],
-                outcome: vec![
+                expected_state: vec![
                     C64(FRAC_1_SQRT_2, 0.0),
                     C64(0.0, 0.0),
                     C64(0.0, 0.0),
@@ -519,34 +512,15 @@ mod test {
             },
         ];
 
-        for case in cases {
-            let mut state = Statevector::zero(case.circuit_size).unwrap();
-            for g in case.instructions {
-                state.execute(g).expect("Failed to apply Gate");
-            }
-            for (i, amp) in state.amplitudes().iter().enumerate() {
-                assert_eq!(
-                    amp, &case.outcome[i],
-                    "Failed on amplitude {i} in test case \"{}\"",
-                    case.name
-                );
-            }
-        }
+        run_circuit_test_table(&cases);
     }
 
     #[test]
     fn crp() {
-        struct TestCase {
-            name: &'static str,
-            circuit_size: usize,
-            instructions: Vec<Instruction>,
-            outcome: Vec<Complex64>,
-        }
-
-        let cases: Vec<TestCase> = vec![
-            TestCase {
+        let cases: Vec<CircuitTestCase> = vec![
+            CircuitTestCase {
                 name: "VERIFY_CRP_GATE_ACTS_AS_IDENTITY_NO_OP_WHEN_CONTROL_QUBIT_IS_ZERO_AND_TARGET_QUBIT_IS_ONE",
-                circuit_size: 2,
+                num_qubits: 2,
                 instructions: vec![
                     X { q: 1 },
                     CRP {
@@ -555,16 +529,16 @@ mod test {
                         phi: PI,
                     },
                 ],
-                outcome: vec![
+                expected_state: vec![
                     C64(0.0, 0.0), // |00>
                     C64(1.0, 0.0), // |01> State must remain entirely unaltered because Control is 0
                     C64(0.0, 0.0), // |10>
                     C64(0.0, 0.0), // |11>
                 ],
             },
-            TestCase {
+            CircuitTestCase {
                 name: "VERIFY_CRP_GATE_ACTS_AS_IDENTITY_NO_OP_WHEN_CONTROL_QUBIT_IS_ONE_AND_TARGET_QUBIT_IS_ZERO",
-                circuit_size: 2,
+                num_qubits: 2,
                 instructions: vec![
                     X { q: 0 },
                     CRP {
@@ -573,7 +547,7 @@ mod test {
                         phi: PI,
                     },
                 ],
-                outcome: vec![
+                expected_state: vec![
                     C64(0.0, 0.0), // |00>
                     C64(0.0, 0.0), // |01>
                     C64(1.0, 0.0), // |10> State must remain entirely unaltered because Target is 0
@@ -582,18 +556,6 @@ mod test {
             },
         ];
 
-        for case in cases {
-            let mut state = Statevector::zero(case.circuit_size).unwrap();
-            for g in case.instructions {
-                state.execute(g).expect("Failed to apply Gate");
-            }
-            for (i, amp) in state.amplitudes().iter().enumerate() {
-                assert_eq!(
-                    amp, &case.outcome[i],
-                    "Failed on amplitude {i} in test case \"{}\"",
-                    case.name
-                );
-            }
-        }
+        run_circuit_test_table(&cases);
     }
 }
