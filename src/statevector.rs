@@ -558,4 +558,86 @@ mod test {
 
         run_circuit_test_table(&cases);
     }
+
+    #[test]
+    fn swap() {
+        let cases = vec![
+            CircuitTestCase {
+                name: "swaps |01> to |10>",
+                num_qubits: 2,
+                instructions: vec![
+                    Instruction::X { q: 1 },
+                    Instruction::SWAP { q_1: 0, q_2: 1 },
+                ],
+                expected_state: vec![
+                    C64(0.0, 0.0),
+                    C64(0.0, 0.0),
+                    C64(1.0, 0.0),
+                    C64(0.0, 0.0),
+                ],
+            },
+            CircuitTestCase {
+                name: "swaps |10> to |01>",
+                num_qubits: 2,
+                instructions: vec![
+                    Instruction::X { q: 0 },
+                    Instruction::SWAP { q_1: 0, q_2: 1 },
+                ],
+                expected_state: vec![
+                    C64(0.0, 0.0),
+                    C64(1.0, 0.0),
+                    C64(0.0, 0.0),
+                    C64(0.0, 0.0),
+                ],
+            },
+            CircuitTestCase {
+                name: "swaps qubits in a superposition",
+                num_qubits: 2,
+                instructions: vec![
+                    Instruction::H { q: 0 },
+                    Instruction::SWAP { q_1: 0, q_2: 1 },
+                ],
+                expected_state: vec![
+                    C64(FRAC_1_SQRT_2, 0.0),
+                    C64(FRAC_1_SQRT_2, 0.0),
+                    C64(0.0, 0.0),
+                    C64(0.0, 0.0),
+                ],
+            },
+            CircuitTestCase {
+                name: "swapping a qubit with itself leaves the state unchanged",
+                num_qubits: 2,
+                instructions: vec![
+                    Instruction::H { q: 0 },
+                    Instruction::SWAP { q_1: 0, q_2: 0 },
+                ],
+                expected_state: vec![
+                    C64(FRAC_1_SQRT_2, 0.0),
+                    C64(0.0, 0.0),
+                    C64(FRAC_1_SQRT_2, 0.0),
+                    C64(0.0, 0.0),
+                ],
+            },
+            CircuitTestCase {
+                name: "swaps non-adjacent qubits",
+                num_qubits: 3,
+                instructions: vec![
+                    Instruction::X { q: 0 },
+                    Instruction::SWAP { q_1: 0, q_2: 2 },
+                ],
+                expected_state: vec![
+                    C64(0.0, 0.0),
+                    C64(1.0, 0.0),
+                    C64(0.0, 0.0),
+                    C64(0.0, 0.0),
+                    C64(0.0, 0.0),
+                    C64(0.0, 0.0),
+                    C64(0.0, 0.0),
+                    C64(0.0, 0.0),
+                ],
+            },
+        ];
+
+        run_circuit_test_table(&cases);
+    }
 }
