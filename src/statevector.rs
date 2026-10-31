@@ -375,6 +375,46 @@ mod test {
 
     use super::*;
 
+    /// A test case describing a circuit of instructions and
+    /// the expected state amplitudes after applying that circuit.
+    struct CircuitTestCase {
+        name: &'static str,
+        num_qubits: usize,
+        instructions: Vec<Instruction>,
+        expected_state: Vec<Complex64>,
+    }
+
+    /// Executes each [`CircuitTestCase`]'s circuit on a statevector and
+    /// compares the resulting amplitudes against the expected outcome.
+    fn run_circuit_test_table(cases: &[CircuitTestCase]) {
+        for case in cases {
+            let mut state = Statevector::zero(case.num_qubits).unwrap_or_else(|e| {
+                panic!("Failed to construct statevector with {} qubits in '{}': {e:?}", case.num_qubits, case.name)
+            });
+
+            assert_eq!(
+                state.amplitudes().len(),
+                case.expected_state.len(),
+                "Bad test case: Amplitude count mismatch in '{}'",
+                case.name
+            );
+
+            for instruction in &case.instructions {
+                state.execute(*instruction).unwrap_or_else(|e| {
+                    panic!("Failed to execute instruction {instruction:?} in '{}': {e:?}", case.name)
+                });
+            }
+
+            for (i, amp) in state.amplitudes().iter().enumerate() {
+                assert_eq!(
+                    amp, &case.expected_state[i],
+                    "Failed on amplitude {i} in test case '{}'",
+                    case.name
+                );
+            }
+        }
+    }
+
     #[test]
     fn strided_x() {
         let mut state = Statevector::zero(2).unwrap();
