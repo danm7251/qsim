@@ -161,7 +161,7 @@ impl Statevector {
             CRP { q_c, q_t, phi } => self.apply_c2q(q_c, q_t, &matrix::p(phi)),
 
             // Two Qubit Gates
-            SWAP { .. } => return Err(SimError::UnsupportedInstruction),
+            SWAP { q_1, q_2 } => self.apply_swap(q_1, q_2),
 
             // Subroutines
             QFT => return Err(SimError::UnsupportedInstruction),
@@ -286,6 +286,38 @@ impl Statevector {
         }
 
         Ok(())
+    }
+
+    /// Applies a SWAP operation between two qubits.
+    ///
+    /// The operation exchanges the states of `target_1` and `target_2`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SimError::InvalidQubit`] if either target qubit does not exist.
+    fn apply_swap(&mut self, target_1: usize, target_2: usize) -> Result<(), SimError> {
+        if target_1 >= self.n {
+            return Err(SimError::InvalidQubit { index: target_1, num_qubits: self.n })
+        }
+
+        if target_2 >= self.n {
+            return Err(SimError::InvalidQubit { index: target_2, num_qubits: self.n })
+        }
+
+        // Swapping a qubit with itself leaves the state unchanged.
+        if target_1 == target_2 {
+            return Ok(())
+        }
+
+
+        // Decompose SWAP into three CNOT gates.
+        let subcircuit = [
+            CNOT { q_c: target_1, q_t: target_2 },
+            CNOT { q_c: target_2, q_t: target_1 },
+            CNOT { q_c: target_1, q_t: target_2 },
+        ];
+
+        self.execute_all(&subcircuit)
     }
 
     // Operations
